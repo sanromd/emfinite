@@ -1,5 +1,5 @@
 ! ========================================================
-subroutine pml_da(q,s,aux,pml,dx,dy,dt,xnp,ynp,nx,ny,nq,num_aux,&
+subroutine pml_da(q,s,aux,p,dx,dy,dt,xnp,ynp,nx,ny,nq,num_aux,&
 	num_pml)
 ! ========================================================
 !
@@ -9,6 +9,8 @@ subroutine pml_da(q,s,aux,pml,dx,dy,dt,xnp,ynp,nx,ny,nq,num_aux,&
 !	dx, dy and dt are the grid and time steps, respectively.
 !	xi, xf and yi,yf are the intial and end points for the inner
 !	grid points; whereas nx and ny are the total size of the grid.
+!
+!	p contains the PML boundary conditions.
 !	
 !	if TM mode
 !	q = (E1, E2, H3), s = (D1, D2, B3x, B3y), aux = (eps1, eps2, mu3)
@@ -19,6 +21,7 @@ subroutine pml_da(q,s,aux,pml,dx,dy,dt,xnp,ynp,nx,ny,nq,num_aux,&
 	integer, intent(in) :: xi, xf, yi, yf, nq, num_aux, nx, ny
 	double precision, intent(in) :: dx, dy, dt
 	double precision, dimension(nx,ny,num_aux), intent(in) :: aux
+	double precision, dimension(nx,ny,num_pml), intent(in) :: p
 	double precision, dimension(ny,nx,nq), intent(inout) :: q
 	double precision, dimension(ny,nx,nq+1), intent(inout) :: s
 	double precision :: qz

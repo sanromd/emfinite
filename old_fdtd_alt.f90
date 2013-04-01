@@ -31,15 +31,19 @@
 	rpux = .5*alambda, rpuy = 5.0*alambda
 	pvelx = 0.0, pvely = -0.61
 
-!	pre-!al!ulations
+!	pre-calculations
 	
 	pi = 4.0*atan(1.0), epso = 8.854e-12
 	co = 1.0/sqrt(4.0*pi*1.0e-7*epso)
 	dt = 0.90/(co*sqrt(1.0/(ddx**2) + 1.0/(ddy**2)))
-	ie = floor(xx/ddx), je = floor(yy/ddy)
-	ib = ie + 1, jb = he + 1
-	ip = ie - npml, jp = je - npml
-	is = floor(ie/2), js = floor(je/2)
+	ie = floor(xx/ddx)
+	je = floor(yy/ddy)
+	ib = ie + 1
+	jb = he + 1
+	ip = ie - npml
+	jp = je - npml
+	is = floor(ie/2)
+	js = floor(je/2)
 	ms = nmax/ns
 	eguid = xnbg**2
 	dt2 = dt*dt
@@ -51,7 +55,7 @@
 	vyu = vye	
 	w = 2.0*pi*co/alambda          
 
-! Free spa!e/diele!tri! (1)
+! Free space/diele!tric (1)
 	eoo(1) = 1.0
 	c1(1) = 0.0
 	c2(1) = 0.0
@@ -128,7 +132,7 @@
 		epsy  = eguid*epso
 		uoz  = muo
 
-!	PML cal!ulations
+!	PML calculations
 
 		sigmex = -(norder + 1.0)*co*log(Ro)/(2.0*ddx*npml)
 		sigmmx = sigmex
@@ -187,15 +191,20 @@
 		Pfi = 0.0
 
 ! 	PML
+
 ! 	Left (Dx)
-		do 100 i = 1,ie
-!			do j = 2,npml + 1
-!				m = npml + 2-j
+!		do j = 2,npml+1
+!			do i = 1,ie
+!				m = j - jp
 !				caDx(i,j) = cay(m)
 !				cbDx(i,j) = cby(m)
-!			enddo	
-			do j = jp + 1,je
-				m = j-jp
+!			enddo
+!		enddo
+
+! 	Right (Dx)
+		do j = jp+1,je
+			do i = 1,ie
+				m = j - jp
 				caDx(i,j) = cay(m)
 				cbDx(i,j) = cby(m)
 			enddo
@@ -225,7 +234,7 @@
 !			enddo
 ! 	Right(Bz)
 			do j = jp + 1,je
-				m = j-jp
+				m = j - jp
 				daBzy(i,j) = day(m)
 				dbBzy(i,j) = dby(m)
 			enddo
@@ -275,25 +284,31 @@
    			tpulse = (1.0 - exp(-(time/tp)**2))*cos(w*time)
 !  			tpulse = exp(-((time - to)/tp)**2)*cos(w*time)
 
+
 !   -------------- (Bz, Hz)
-			do i = 1,ie
-				do j = 1,je
+			do j = 1,je
+				do i = 1,ie
 					Bzx(i,j) = daBzx(i,j)*Bzx(i,j) + dbBzx(i,j)*(ey(i,j) - ey(i+1,j))
 					Bzy(i,j) = daBzy(i,j)*Bzy(i,j) + dbBzy(i,j)*(ex(i,j+1) - ex(i,j))
 					Bz(i,j) = Bzx(i,j) + Bzy(i,j)
 					hz(i,j) = Bz(i,j)/uoz(i,j)
-!					hz(i ,1) = fmode0(i)*tpulse
+				enddo
+			enddo
 
 !   ------------- (Dx, Px, Ex)
-
-					Dx(i,j+1) = caDx(i,j+1)*Dx(i,j+1) + cbDx(i,j+1)*(hz(i,j+1) - hz(i,j-1))
-					ex(i,j+1) = Dx(i,j+1)/(epsx(i,j+1) + tface(i,j+1))
-					ex(i,1) = tpulse*fmode0(i)
+			do j = 2,je
+				do i = 1,ie
+					Dx(i,j) = caDx(i,j)*Dx(i,j) + cbDx(i,j)*(hz(i,j) - hz(i,j-1))
+					ex(i,j) = Dx(i,j)/epsx(i,j)
+				enddo
+			enddo
+			ex(i,1) = tpulse*fmode0(i)
 
 !	-------------- (Dy, Py, Ey)
-
-					Dy(i+1,j) = caDy(i+1,j)*Dy(i+1,j) + cbDy(i+1,j)*(hz(i-1,j) - hz(i+1,j))
-					ey(i+1,j) = Dy(i+1,j)/(epsy(i+1,j) + tface(i+1,j))
+			do j = 1, je
+				do i = 2,ie
+					Dy(i,j) = caDy(i,j)*Dy(i,j) + cbDy(i,j)*(hz(i-1,j) - hz(i,j))
+					ey(i,j) = Dy(i,j)/epsy(i,j)
 				enddo
 			enddo
 
