@@ -302,7 +302,7 @@
 					ex(i,j) = Dx(i,j)/epsx(i,j)
 				enddo
 			enddo
-			ex(i,1) = tpulse*fmode0(i)
+			ex(1:ie,1) = tpulse*fmode0(i)
 
 !	-------------- (Dy, Py, Ey)
 			do j = 1, je

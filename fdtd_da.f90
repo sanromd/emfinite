@@ -1,6 +1,5 @@
 ! ========================================================
-subroutine em_da(q,s,aux,pml,nq,num_aux,num_pml,dx,dy,dt,nx,ny,&
-	             xi,xf,yi,yf,nxi_pml,nxf_pml,nyi_pml,nyf_pml)
+subroutine em_da(q,s,aux,pml,nq,num_aux,num_pml,dx,dy,dt,nx,ny,xi,xf,yi,yf,nxi_pml,nxf_pml,nyi_pml,nyf_pml)
 ! ========================================================
 !
 !	Calculates the differential Maxwell equations for the inside
@@ -20,51 +19,52 @@ subroutine em_da(q,s,aux,pml,nq,num_aux,num_pml,dx,dy,dt,nx,ny,&
 	integer, intent(in) :: xi, xf, yi, yf, nq, num_aux, nx, ny
 	integer, intent(in) :: num_pml, nxi_pml, nxf_pml, nyi_pml, nyf_pml
 	double precision, intent(in) :: dx, dy, dt
-	double precision, dimension(ny,nx,num_aux), intent(in) :: aux
-	double precision, dimension(ny,nx,nq), intent(inout) :: q
-	double precision, dimension(ny,nx,nq+1), intent(inout) :: s
-	double precision, dimension(ny,nx,num_pml), intent(in) :: pml
-
-	if((xi.gt.nxi_npml).and.(xf.lt.nx-nxf_npml).and.(yi.gt.nyi_npml).and.(yf.lt.ny-nyf_npml) then
+	double precision, dimension(num_aux,ny,nx), intent(in) :: aux
+	double precision, dimension(nq,ny,nx), intent(inout) :: q
+	double precision, dimension(nq+1,ny,nx), intent(inout) :: s
+	double precision, dimension(num_pml,ny,nx), intent(in) :: pml
+	integer :: i,j
+	
+	if ((xi.gt.nxi_pml).and.(xf.lt.nx-nxf_pml+1).and.(yi.gt.nyi_pml).and.(yf.lt.ny-nyf_pml+1)) then
 		do j = xi+1,xf-1
 			do i = yi+1,yf-1
-				s(i,j,3) = s(i,j,3) - (dt/dx)*(q(i,j+1,2) - q(i,j,2)) 
-				s(i,j,4) = s(i,j,4) + (dt/dy)*(q(i+1,j,1) - q(i,j,1))
-				q(i,j,3) = (s(i,j,3) + s(i,j,4))/aux(i,j,3)
+				s(3,i,j) = s(3,i,j) - (dt/dx)*(q(2,i,j+1) - q(2,i,j)) 
+				s(4,i,j) = s(4,i,j) + (dt/dy)*(q(1,i+1,j) - q(1,i,j))
+				q(3,i,j) = (s(3,i,j) + s(4,i,j))/aux(2,i,j)
 			enddo
 		enddo
 		do j = xi+1,xf-1
 			do i = yi+1,yf-1
-				s(i,j,1) = s(i,j,1) + (dt/dy)*(q(i,j,3)-q(i-1,j,3))
-				q(i,j,1) = s(i,j,1)/aux(i,j,1)
+				s(1,i,j) = s(1,i,j) + (dt/dy)*(q(3,i,j)-q(3,i-1,j))
+				q(1,i,j) = s(1,i,j)/aux(1,i,j)
 			enddo
 		enddo
 		do j = xi+1,xf-1
 			do i = yi+1,yf-1
-				s(i,j,2) = s(i,j,2) - (dt/dx)*(q(i,j,3)-q(i,j-1,3))
-				q(i,j,2) = s(i,j,2)/aux(i,j,2)
+				s(2,i,j) = s(2,i,j) - (dt/dx)*(q(3,i,j)-q(3,i,j-1))
+				q(2,i,j) = s(2,i,j)/aux(1,i,j)
 			enddo
 		enddo
 	else
 		do j = xi+1,xf-1
 			do i = yi+1,yf-1
-				s(i,j,3) = pml(i,j,1)*s(i,j,3) - pml(i,j,2)*(q(i,j+1,2) - q(i,j,2)) 
-				s(i,j,4) = pml(i,j,3)*s(i,j,4) + pml(i,j,4)*(q(i+1,j,1) - q(i,j,1))
-				q(i,j,3) = (s(i,j,3) + s(i,j,4))/aux(i,j,3)
+				s(3,i,j) = pml(1,i,j)*s(3,i,j) - pml(2,i,j)*(q(2,i,j+1) - q(2,i,j)) 
+				s(4,i,j) = pml(3,i,j)*s(4,i,j) + pml(4,i,j)*(q(1,i+1,j) - q(1,i,j))
+				q(3,i,j) = (s(3,i,j) + s(4,i,j))/aux(2,i,j)
 			enddo
 		enddo
 		do j = xi+1,xf-1
 			do i = yi+1,yf-1
-				s(i,j,1) = pml(i,j,5)*s(i,j,1) + pml(i,j,6)*(q(i,j,3)-q(i-1,j,3))
-				q(i,j,1) = s(i,j,1)/aux(i,j,1)
+				s(1,i,j) = pml(5,i,j)*s(1,i,j) + pml(6,i,j)*(q(3,i,j)-q(3,i-1,j))
+				q(1,i,j) = s(1,i,j)/aux(1,i,j)
 			enddo
 		enddo
 		do j = xi+1,xf-1
 			do i = yi+1,yf-1
-				s(i,j,2) = pml(i,j,7)*s(i,j,2) - pml(i,j,8)*(q(i,j,3)-q(i,j-1,3))
-				q(i,j,2) = s(i,j,2)/aux(i,j,2)
+				s(2,i,j) = pml(7,i,j)*s(2,i,j) - pml(8,i,j)*(q(3,i,j)-q(3,i,j-1))
+				q(2,i,j) = s(2,i,j)/aux(1,i,j)
 			enddo
 		enddo
-	endif
+	end if
 	return
 end subroutine em_da
