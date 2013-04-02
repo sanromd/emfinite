@@ -50,7 +50,7 @@ subroutine em_da_pml(q,s,aux,pml,nq,num_aux,num_pml,dx,dy,dt,nx,ny,xi,xf,yi,yf)
 	enddo
 
 !	-------------- (Dy, Py, Ey)
-	if (xf.eq.nx) then
+	if (yf.eq.ny) then
 		yfi = ny-1
 	else
 		yfi = yf
