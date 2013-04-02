@@ -283,7 +283,7 @@
 !			tpulse = sin(w*time)
    			tpulse = (1.0 - exp(-(time/tp)**2))*cos(w*time)
 !  			tpulse = exp(-((time - to)/tp)**2)*cos(w*time)
-
+			ex(1:ie,1) = tpulse*fmode0(i)
 
 !   -------------- (Bz, Hz)
 			do j = 1,je
@@ -302,8 +302,7 @@
 					ex(i,j) = Dx(i,j)/epsx(i,j)
 				enddo
 			enddo
-			ex(1:ie,1) = tpulse*fmode0(i)
-
+			
 !	-------------- (Dy, Py, Ey)
 			do j = 1, je
 				do i = 2,ie
