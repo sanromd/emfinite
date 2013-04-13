@@ -82,7 +82,7 @@ for t in range(1,100):
 
     #bc(Q1,Q2,Q3)
 
-    #Q3.view(draw)
-    #Q3.view(io)
+    Q3.view(draw)
+    Q3.view(io)
     
 sys.exit()
