@@ -8,10 +8,10 @@ petsc4py.init(sys.argv)
 import numpy as np
 
 # space
-xx = 1e-6 
-yy = 500e-6 
+xx = 1e-6
+yy = 500e-6
 
-ddx = 5e-9 
+ddx = 5e-9
 ddy = 5e-9
 
 nx = 35
@@ -35,7 +35,7 @@ zo = np.sqrt(eo/mo)
 # material
 mat_shape = 'homogeneous'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 num_aux = 3
-# background refractive index 
+# background refractive index
 bkg_er = 1.5
 bkg_mr = 1.5
 bkg_n  = np.sqrt(bkg_er*bkg_mr)
@@ -103,7 +103,7 @@ aux_bc_y_upper = 'metallic'
 
 # parameters needed for pml calculation
 num_pml = 8
-norder = 3 
+norder = 3
 Ro = 1.0e-6
 
 # ........ excitation - initial conditoons .......................
@@ -162,12 +162,12 @@ def etar(num_aux,xi,xf,yi,yf,ddx,ddy):
     ..interfacey:   ibid in y-direction
     ..multilayer:   2D multilayers in x or y direction.
 
-    
-    y,x are the point coordinates of the grid. 
-         
-    
+
+    y,x are the point coordinates of the grid.
+
+
     on output aux holds:
-         
+
                                EM equivalent
 
          idim   curvilinear  |   TE      TM
@@ -224,13 +224,15 @@ def etar(num_aux,xi,xf,yi,yf,ddx,ddy):
         eta[0,:,:] = layers[0,0]*(N_layers*tlp<y)*(y<=N_layers*tlp+layers[0,3])
         eta[1,:,:] = layers[0,1]*(N_layers*tlp<y)*(y<=N_layers*tlp+layers[0,3])
         eta[2,:,:] = layers[0,1]*(N_layers*tlp<y)*(y<=N_layers*tlp+layers[0,3])
-        
+
     return eta
 
 def qinit(Q1,Q2,Q3,da):
     """
     Set initial conditions for q in the grid, but not on the boundary lines
     """
+    nx, ny = da.getSizes()
+    (xi, xf), (yi, yf) = da.getRanges()
     q1 = da.getVecArray(Q1)
     q2 = da.getVecArray(Q2)
     q3 = da.getVecArray(Q3)
@@ -249,75 +251,80 @@ def qbc(Q1,Q2,Q3,da):
     ..rounded:      end boundary becomes beginning boundary (not implemented)
     ..none:         pass, does not set any value
     """
+    nx, ny = da.getSizes()
+    (xi, xf), (yi, yf) = da.getRanges()
+
     q1  = da.getVecArray(Q1)
     q2  = da.getVecArray(Q2)
     q3  = da.getVecArray(Q3)
-    
-    if xi == 1: 
+
+    if xi == 0:
         if bc_x_lower == 'metallic':
             q1[0,:] = 0.0
             q2[0,:] = 0.0
             q3[0,:] = 0.0
         elif bc_x_lower == 'scattering':
-            q1[0,:] = bc_scattering(Q1,Q2,Q3,da)
+            bc_scattering(Q1,Q2,Q3,da,0,0)
         elif bc_x_lower == 'none':
             pass
-    if xi == nx:
+    if xi == nx-1:
         if bc_x_upper == 'metallic':
             q1[-1,:] = 0.0
             q2[-1,:] = 0.0
             q3[-1,:] = 0.0
         elif bc_x_upper == 'scattering':
-            q1[-1,:] = bc_scattering(Q1,Q2,Q3,da)
+            bc_scattering(Q1,Q2,Q3,da,0,1)
         elif bc_x_upper == 'none':
             pass
-    if yi == 1:
+    if yi == 0:
         if bc_y_lower == 'metallic':
             q1[:,0] = 0.0
             q2[:,0] = 0.0
             q3[:,0] = 0.0
         elif bc_y_lower == 'scattering':
-            q1[:,0] = bc_scattering(Q1,Q2,Q3,da)
+            bc_scattering(Q1,Q2,Q3,da,1,0)
         elif bc_y_lower == 'none':
             pass
-    if yf == ny:
+    if yf == ny-1:
         if bc_y_upper == 'metallic':
             q1[:,-1] = 0.0
             q2[:,-1] = 0.0
             q3[:,-1] = 0.0
         elif bc_y_upper == 'scattering':
-            q1[:,-1] = bc_scattering(Q1,Q2,Q3,da)
+            bc_scattering(Q1,Q2,Q3,da,1,1)
         elif bc_y_upper == 'none':
             pass
 
-def bc_scattering(Q1,Q2,Q3,da):
+def bc_scattering(Q1,Q2,Q3,da,axis,side):
     """
     Boundary scattering conditions (source)
     """
+    nx, ny = da.getSizes()
+    (xi, xf), (yi, yf) = da.getRanges()
 
     q1  = da.getVecArray(Q1)
     q2  = da.getVecArray(Q2)
     q3  = da.getVecArray(Q3)
-    
-    if xi == 1: 
+
+    if (axis,side) == (0,0) and xi == 0:
         q2[ 0,:] = 1.0
-    if yi == 1:
+    if (axis,side) == (1,0) and yi == 0:
         q1[:, 0] = 0.0
-    if yf == ny:
-        #q1[:,-1] = 0.0
-        #q2[:,-1] = 0.0
-        #q3[:,-1] = 0.0
-        pass
-    if xf == nx:
+    if (axis,side) == (0,1) and xf == nx-1:
         #q1[-1,:] = 0.0
         #q2[-1,:] = 0.0
         #q3[-1,:] = 0.0
+        pass
+    if (axis,side) == (1,1) and yf == ny-1:
+        #q1[:,-1] = 0.0
+        #q2[:,-1] = 0.0
+        #q3[:,-1] = 0.0
         pass
 
 def aux_bc_pml(pml,pml_type,xi,xf,yi,yf,gxi,gxf,gyi,gyf):
     """
     Set  PML on the auxiliary boundary conditions.
-    """    
+    """
     from build_pml import build_pml
     build_pml(pml,pml_type,ddx,ddy,dt,norder,ro,co,xi,xf,yi,yf,gxi,gxf,gyi,gyf,mx,my)
 
@@ -335,7 +342,7 @@ from fdtd_da_pml import em_da_pml_q12 as em_q12
 
 stype  = PETSc.DA.StencilType.STAR
 swidth = 1
-da = PETSc.DA().create([mx,my], dof=1,
+da = PETSc.DA().create([nx,ny], dof=1,
                        stencil_type=stype,
                        stencil_width=swidth)
 
@@ -380,7 +387,7 @@ draw = PETSc.Viewer.DRAW()
 root = da.comm.getRank() == 0
 
 for t in range(1,100):
-    if t == 1: 
+    if t == 1:
         qinit(Q1,Q2,Q3,da)
         qbc(Q1,Q2,Q3,da)
 
@@ -395,8 +402,7 @@ for t in range(1,100):
     da.localToGlobal(Q2loc, Q2)
 
     #bc(Q1,Q2,Q3)
-
     Q3.view(draw)
     Q3.view(io)
-    
+
 sys.exit()
