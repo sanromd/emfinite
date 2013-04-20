@@ -92,9 +92,9 @@ if mat_shape=='multilayer':
 # ........ Boundary settings settings .................
 
 bc_x_lower = 'scattering'
-bc_x_upper = 'metallic'
-bc_y_upper = 'metallic'
-bc_y_upper = 'metallic'
+bc_x_upper = 'none'
+bc_y_lower = 'scattering'
+bc_y_upper = 'none'
 
 aux_bc_x_lower = 'scattering'
 aux_bc_x_upper = 'pml'
@@ -144,9 +144,6 @@ ddy = (y_upper-y_lower)/my
 ddt = dt=0.90/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
 max_steps = 250000
 t_final = (x_upper-x_lower)/v
-
-
-
 
 # -------- GLOBAL FUNCTION DEFINITIONS --------------
 
@@ -232,11 +229,76 @@ def etar(num_aux,xi,xf,yi,yf,ddx,ddy):
 
 def qinit(Q1,Q2,Q3,da):
     """
-    Set initial conditions for q in the grid
+    Set initial conditions for q in the grid, but not on the boundary lines
     """
     q1 = da.getVecArray(Q1)
     q2 = da.getVecArray(Q2)
     q3 = da.getVecArray(Q3)
+    q1[:,:] = 0.0
+    q2[:,:] = 0.0
+    q3[:,:] = 0.0
+
+def qbc(Q1,Q2,Q3,da):
+    """
+    Set the boundary conditions for q. Implemented conditions are:
+
+    ..metallic:     set all qs to 0
+    ..scattering:   scattering boundary conditions (line), set by function bc_scattering (user controlled)
+    ..periodic:     periodic boundary conditions            (not implemented)
+    ..neumann:      neumann boundary conditions             (not implemented)
+    ..rounded:      end boundary becomes beginning boundary (not implemented)
+    ..none:         pass, does not set any value
+    """
+    q1  = da.getVecArray(Q1)
+    q2  = da.getVecArray(Q2)
+    q3  = da.getVecArray(Q3)
+    
+    if xi == 1: 
+        if bc_x_lower == 'metallic':
+            q1[0,:] = 0.0
+            q2[0,:] = 0.0
+            q3[0,:] = 0.0
+        elif bc_x_lower == 'scattering':
+            q1[0,:] = bc_scattering
+        elif bc_x_lower == 'none'
+            pass
+    if xi == nx:
+        if bc_x_upper == 'metallic':
+            q1[-1,:] = 0.0
+            q2[-1,:] = 0.0
+            q3[-1,:] = 0.0
+        elif bc_x_upper == 'scattering':
+            q1[-1,:] = bc_scattering
+        elif bc_x_upper == 'none'
+            pass
+    if yi == 1:
+        if bc_y_lower == 'metallic':
+            q1[:,0] = 0.0
+            q2[:,0] = 0.0
+            q3[:,0] = 0.0
+        elif bc_y_lower == 'scattering':
+            q1[:,0] = bc_scattering
+        elif bc_y_lower == 'none'
+            pass
+    if yf == ny:
+        if bc_y_upper == 'metallic':
+            q1[:,-1] = 0.0
+            q2[:,-1] = 0.0
+            q3[:,-1] = 0.0
+        elif bc_y_upper == 'scattering':
+            q1[:,-1] = bc_scattering
+        elif bc_y_upper == 'none'
+            pass
+
+def bc_scattering(Q1,Q2,Q3,da):
+    """
+    Boundary scattering conditions (source)
+    """
+
+    q1  = da.getVecArray(Q1)
+    q2  = da.getVecArray(Q2)
+    q3  = da.getVecArray(Q3)
+    
     if xi == 1: 
         q2[ 0,:] = 1.0
     if yi == 1:
@@ -252,61 +314,21 @@ def qinit(Q1,Q2,Q3,da):
         #q3[-1,:] = 0.0
         pass
 
-def qbc(Q1,Q2,Q3,da):
-    """
-    Set the boundary conditions for q. Implemented conditions are:
-
-    ..metallic:     set q = 0
-    ..scattering:   scattering boundary conditions (line), set by function bc_scattering (user controlled)
-    ..periodic:     periodic boundary conditions            (not implemented)
-    ..neumann:      neumann boundary conditions             (not implemented)
-    ..rounded:      end boundary becomes beginning boundary (not implemented)
-    """
-    q1  = da.getVecArray(Q1)
-    q2  = da.getVecArray(Q2)
-    q3  = da.getVecArray(Q3)
-    
-    if bc_x_lower == 'metallic':
-        q1[0,:] = 0.0
-        q2[0,:] = 0.0
-        q3[0,:] = 0.0
-    elif bc_x_lower == 'scattering':
-        q1[mx,:] = bc_scattering
-
-    if bc_x_upper == 'metallic':
-        q1[0,:] = 0.0
-        q2[0,:] = 0.0
-        q3[0,:] = 0.0
-    elif bc_x_lower == 'scattering':
-        q1[mx,:] = bc_scattering
-
-    if bc_y_lower == 'metallic':
-        q1[:,0] = 0.0
-        q2[:,0] = 0.0
-        q3[:,0] = 0.0
-    elif bc_x_lower == 'scattering':
-        q1[:,0] = bc_scattering
-
-    if bc_y_upper == 'metallic':
-        q1[:,my] = 0.0
-        q2[:,my] = 0.0
-        q3[:,my] = 0.0
-    elif bc_x_lower == 'scattering':
-        q1[:,my] = bc_scattering
-
-
 def aux_bc_pml(pml,pml_type,xi,xf,yi,yf,gxi,gxf,gyi,gyf):
     """
     Set  PML on the auxiliary boundary conditions.
-    """
-    
+    """    
     from build_pml import build_pml
     build_pml(pml,pml_type,ddx,ddy,dt,norder,ro,co,xi,xf,yi,yf,gxi,gxf,gyi,gyf,mx,my)
 
+def aux_bc():
+    """
+    user controlled boundary auxiliary conditions
+    """
+    pass
 
 
 # create DA and allocate global and local variables
-
 from petsc4py import PETSc
 from fdtd_da_pml import em_da_pml_q3  as em_q3
 from fdtd_da_pml import em_da_pml_q12 as em_q12
@@ -343,13 +365,9 @@ aux = np.ones ([num_aux,gxf-gxi,gyf-gyi], order='F')
 #da_pml = PETSc.DA().create([mx,my], dof=num_pml,
 #                       stencil_type=stype,
 #                       stencil_width=swidth)
-
 #PML = da_pml.createGlobalVec()
 #PMLloc = da_pml.createLocalVec()
-
 #pml = PMLloc.getArray().reshape([num_pml,gxf-gxi,gyf-gyi], order='F')
-
-
 pml = np.ones ([num_pml,gxf-gxi,gyf-gyi], order='F')
 
 xi  += 1
@@ -364,6 +382,7 @@ root = da.comm.getRank() == 0
 for t in range(1,100):
     if t == 1: 
         qinit(Q1,Q2,Q3,da)
+        qbc(Q1,Q2,Q3,da)
 
     da.globalToLocal(Q1, Q1loc)
     da.globalToLocal(Q2, Q2loc)
@@ -378,6 +397,6 @@ for t in range(1,100):
     #bc(Q1,Q2,Q3)
 
     Q3.view(draw)
-#    Q3.view(io)
+    Q3.view(io)
     
 sys.exit()
