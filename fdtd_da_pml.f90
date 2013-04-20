@@ -20,7 +20,7 @@ subroutine em_da_pml_q3(aux,pml,s3,s4,q1,q2,q3,na,np,xi,xf,yi,yf,gxi,gxf,gyi,gyf
      do i = is,ie
         s3(i,j) = pml(1,i,j)*s3(i,j) + pml(2,i,j)*(q1(i,j+1) - q1(i,j))
         s4(i,j) = pml(3,i,j)*s4(i,j) + pml(4,i,j)*(q2(i,j) - q2(i+1,j))
-        q3(i,j) = (s3(i,j)+s4(i,j))/aux(3,i,j)
+        q3(i,j) = (s3(i,j) + s4(i,j))/aux(3,i,j)
      enddo
   enddo
 

@@ -48,7 +48,7 @@ subroutine build_pml(pml,num_pml,pml_type,ddx,ddy,dt,norder,Ro,co,xi,xf,yi,yf,gx
     select case(pml_type)
 
         case(0) !left boundary PML
-            ! left q2
+            ! left q2 - Dy
             is = 1; ie = num_pml
             js = yi; je = yf
             if (gyf == yf) je = yf-1
@@ -59,14 +59,15 @@ subroutine build_pml(pml,num_pml,pml_type,ddx,ddy,dt,norder,Ro,co,xi,xf,yi,yf,gx
                 end do 
             end do
 
+            ! left q3y Bzy
             is = xi; ie = num_pml+1
             js = yi; je = yf
             if (gxi ==  1)  is = 2
             if (gyf == yf)  je = yf-1 
             do j = js,je
                 do i = is,ie
-                    pml(5,i,j) = cay(i-1)
-                    pml(6,i,j) = cby(i-1)
+                    pml(5,i,j) = cax(i-1) 
+                    pml(6,i,j) = cbx(i-1)
                 end do
             end do
 
@@ -79,8 +80,8 @@ subroutine build_pml(pml,num_pml,pml_type,ddx,ddy,dt,norder,Ro,co,xi,xf,yi,yf,gx
                     m = i - nx + num_pml + 1
                     pml(3,i,j) = day(m)
                     pml(4,i,j) = dby(m)
-                    pml(5,i,j) = cay(m)
-                    pml(6,i,j) = cby(m)
+                    pml(5,i,j) = cax(m)
+                    pml(6,i,j) = cbx(m)
                 end do 
             end do
 
@@ -102,8 +103,8 @@ subroutine build_pml(pml,num_pml,pml_type,ddx,ddy,dt,norder,Ro,co,xi,xf,yi,yf,gx
 
             do j = js,je
                 do i = is, ie 
-                    pml(7,i,j) = cax(i-1)
-                    pml(8,i,j) = cbx(i-1)
+                    pml(7,i,j) = cay(i-1)
+                    pml(8,i,j) = cby(i-1)
                 end do
             end do
 
@@ -116,8 +117,8 @@ subroutine build_pml(pml,num_pml,pml_type,ddx,ddy,dt,norder,Ro,co,xi,xf,yi,yf,gx
                     m = j - ny + num_pml + 1
                     pml(1,i,j) = dax(m)
                     pml(2,i,j) = dbx(m)
-                    pml(7,i,j) = cax(m)
-                    pml(8,i,j) = cbx(m)
+                    pml(7,i,j) = cay(m)
+                    pml(8,i,j) = cby(m)
                 end do
             end do
 
