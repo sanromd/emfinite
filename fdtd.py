@@ -259,8 +259,8 @@ def qbc(Q1,Q2,Q3,da):
             q2[0,:] = 0.0
             q3[0,:] = 0.0
         elif bc_x_lower == 'scattering':
-            q1[0,:] = bc_scattering
-        elif bc_x_lower == 'none'
+            q1[0,:] = bc_scattering(Q1,Q2,Q3,da)
+        elif bc_x_lower == 'none':
             pass
     if xi == nx:
         if bc_x_upper == 'metallic':
@@ -268,8 +268,8 @@ def qbc(Q1,Q2,Q3,da):
             q2[-1,:] = 0.0
             q3[-1,:] = 0.0
         elif bc_x_upper == 'scattering':
-            q1[-1,:] = bc_scattering
-        elif bc_x_upper == 'none'
+            q1[-1,:] = bc_scattering(Q1,Q2,Q3,da)
+        elif bc_x_upper == 'none':
             pass
     if yi == 1:
         if bc_y_lower == 'metallic':
@@ -277,8 +277,8 @@ def qbc(Q1,Q2,Q3,da):
             q2[:,0] = 0.0
             q3[:,0] = 0.0
         elif bc_y_lower == 'scattering':
-            q1[:,0] = bc_scattering
-        elif bc_y_lower == 'none'
+            q1[:,0] = bc_scattering(Q1,Q2,Q3,da)
+        elif bc_y_lower == 'none':
             pass
     if yf == ny:
         if bc_y_upper == 'metallic':
@@ -286,8 +286,8 @@ def qbc(Q1,Q2,Q3,da):
             q2[:,-1] = 0.0
             q3[:,-1] = 0.0
         elif bc_y_upper == 'scattering':
-            q1[:,-1] = bc_scattering
-        elif bc_y_upper == 'none'
+            q1[:,-1] = bc_scattering(Q1,Q2,Q3,da)
+        elif bc_y_upper == 'none':
             pass
 
 def bc_scattering(Q1,Q2,Q3,da):
