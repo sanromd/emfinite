@@ -152,16 +152,31 @@ t_final = (x_upper-x_lower)/v
 
 def etar(num_aux,xi,xf,yi,yf,ddx,ddy):
     """
-    eta = etar(t,X,Y)
+    eta = etar(num_aux,xi,xf,yi,yf,ddx,ddy)
 
-    This function returns the refractive index map based on general definitions set earlier,
-    Gaussian cases support moving RIPs.
+    Sets the auxiliary arrays for permittivity and permeability.
+
+    Implemented mappings
+
+    ..gaussian1dx:  stationary and moving gaussian shape for eps and mu
+    ..homogeneous:  homogeneous refractive index in eps and mu
+    ..interface:    simple interface (jump) acroos the 2d domain
+    ..interfacex:   simple interface (jump) 1D in x-direction
+    ..interfacey:   ibid in y-direction
+    ..multilayer:   2D multilayers in x or y direction.
+
     
-    x are the coordinate of the grid centers state.grid.e_j.centers, e_j = x 
-         aux holds:
-         0: eta_1
-         1: eta_2 
-         2: eta_3
+    y,x are the point coordinates of the grid. 
+         
+    
+    on output aux holds:
+         
+                               EM equivalent
+
+         idim   curvilinear  |   TE      TM
+         0:     eta_1        |   mu1     eps1
+         1:     eta_2        |   mu2     eps2
+         2:     eta_3        |   eps3    mu3
 
     """
 
@@ -217,7 +232,7 @@ def etar(num_aux,xi,xf,yi,yf,ddx,ddy):
 
 def qinit(Q1,Q2,Q3,da):
     """
-    Set initial conditions in the grid
+    Set initial conditions for q in the grid
     """
     q1 = da.getVecArray(Q1)
     q2 = da.getVecArray(Q2)
@@ -238,6 +253,13 @@ def qinit(Q1,Q2,Q3,da):
         pass
 
 def qbc(Q1=Q1,Q2=Q2,Q3=Q3,da=da,idim=0):
+    """
+    Set the boundary conditions for q. Implemented conditions are:
+
+    ..metallic:     set q = 0
+    ..scattering:   scattering boundary conditions (line), set by function bc_scattering (user controlled)
+    ..cyclical:     not implemented 
+    """
     q1  = da.getVecArray(Q1)
     q2  = da.getVecArray(Q2)
     q3  = da.getVecArray(Q3)
@@ -271,26 +293,21 @@ def qbc(Q1=Q1,Q2=Q2,Q3=Q3,da=da,idim=0):
         q1[:,my] = bc_scattering
 
 
-def aux_bc_pml(pml_type):
+def aux_bc_pml(pml,pml_type,xi,xf,yi,yf,gxi,gxf,gyi,gyf):
     """
-    Set the PML auxiliary boundary conditions.
+    Set  PML on the auxiliary boundary conditions.
     """
     
     from build_pml import build_pml
-    build_pml(num_pml,pml_type,ddx,ddy,gxi,gxf,gyi,gyf)
-
-
-
-    pml = dp.getVecArray(PML)
-
+        build_pml(pml,pml_type,ddx,ddy,dt,norder,ro,co,xi,xf,yi,yf,gxi,gxf,gyi,gyf,mx,my)
 
 
 
 # create DA and allocate global and local variables
 
 from petsc4py import PETSc
-from fdtd_da_pml import em_da_q3  as em_q3
-from fdtd_da_pml import em_da_q12 as em_q12
+from fdtd_da_pml import em_da_pml_q3  as em_q3
+from fdtd_da_pml import em_da__pml_q12 as em_q12
 
 stype  = PETSc.DA.StencilType.STAR
 swidth = 1
