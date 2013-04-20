@@ -11,8 +11,8 @@ import numpy as np
 xx = 1e-6
 yy = 500e-6
 
-ddx = 5e-9
-ddy = 5e-9
+ddx = 1#5e-9
+ddy = 1#5e-9
 
 nx = 35
 ny = 35
@@ -141,9 +141,12 @@ else:
 
 ddx = (x_upper-x_lower)/mx
 ddy = (y_upper-y_lower)/my
-ddt = dt=0.90/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
+ddt = dt = 1#0.90/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
 max_steps = 250000
 t_final = (x_upper-x_lower)/v
+
+dxdt = 1
+dydt = 1
 
 # -------- GLOBAL FUNCTION DEFINITIONS --------------
 
@@ -321,12 +324,13 @@ def bc_scattering(Q1,Q2,Q3,da,axis,side):
         #q3[:,-1] = 0.0
         pass
 
-def aux_bc_pml(pml,pml_type,xi,xf,yi,yf,gxi,gxf,gyi,gyf):
+def aux_bc_pml(pml,pml_type,xi,xf,yi,yf,nx,ny):
     """
     Set  PML on the auxiliary boundary conditions.
     """
     from build_pml import build_pml
-    build_pml(pml,pml_type,ddx,ddy,dt,norder,ro,co,xi,xf,yi,yf,gxi,gxf,gyi,gyf,mx,my)
+    ddx,ddy,dt,co = 1,1,1,1
+    build_pml(pml,pml_type,ddx,ddy,dt,norder,Ro,co,xi+1,xf,yi+1,yf,nx,ny)
 
 def aux_bc():
     """
@@ -337,8 +341,7 @@ def aux_bc():
 
 # create DA and allocate global and local variables
 from petsc4py import PETSc
-from fdtd_da_pml import em_da_pml_q3  as em_q3
-from fdtd_da_pml import em_da_pml_q12 as em_q12
+from fdtd_da_pml import fdtd_2d
 
 stype  = PETSc.DA.StencilType.STAR
 swidth = 1
@@ -361,13 +364,13 @@ q1 = Q1loc.getArray().reshape([gxf-gxi,gyf-gyi], order='F')
 q2 = Q2loc.getArray().reshape([gxf-gxi,gyf-gyi], order='F')
 q3 = Q3loc.getArray().reshape([gxf-gxi,gyf-gyi], order='F')
 
-s1  = np.zeros([gxf-gxi,gyf-gyi], order='F')
-s2  = np.zeros([gxf-gxi,gyf-gyi], order='F')
-s3  = np.zeros([gxf-gxi,gyf-gyi], order='F')
-s4  = np.zeros([gxf-gxi,gyf-gyi], order='F')
+s1  = np.zeros([xf-xi,yf-yi], order='F')
+s2  = np.zeros([xf-xi,yf-yi], order='F')
+s3  = np.zeros([xf-xi,yf-yi], order='F')
+s4  = np.zeros([xf-xi,yf-yi], order='F')
 
 #aux = etar(num_aux,gxi,gxf,gyi,gyf,ddx,ddy)
-aux = np.ones ([num_aux,gxf-gxi,gyf-gyi], order='F')
+aux = np.ones ([num_aux,xf-xi,yf-yi], order='F')
 
 #da_pml = PETSc.DA().create([mx,my], dof=num_pml,
 #                       stencil_type=stype,
@@ -375,12 +378,17 @@ aux = np.ones ([num_aux,gxf-gxi,gyf-gyi], order='F')
 #PML = da_pml.createGlobalVec()
 #PMLloc = da_pml.createLocalVec()
 #pml = PMLloc.getArray().reshape([num_pml,gxf-gxi,gyf-gyi], order='F')
-pml = np.ones ([num_pml,gxf-gxi,gyf-gyi], order='F')
-
-xi  += 1
-yi  += 1
-gxi += 1
-gyi += 1
+pml = np.ones ([num_pml,xf-xi,yf-yi], order='F')
+pml_axis = 0
+pml_side = 1
+pml_type = pml_axis*2+pml_side
+aux_bc_pml(pml,pml_type,xi,xf,yi,yf,nx,ny)
+#from matplotlib import pylab
+#for i in range(8):
+#    pylab.figure()
+#    pylab.contourf(pml[i,:,:].copy())
+#    pylab.colorbar()
+#pylab.show()
 
 io   = PETSc.Viewer.BINARY()
 draw = PETSc.Viewer.DRAW()
@@ -393,11 +401,11 @@ for t in range(1,100):
 
     da.globalToLocal(Q1, Q1loc)
     da.globalToLocal(Q2, Q2loc)
-    em_q3(aux,pml,s3,s4,q1,q2,q3,xi,xf,yi,yf,gxi,gxf,gyi,gyf)
+    fdtd_2d(aux,pml,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
     da.localToGlobal(Q3loc, Q3)
 
     da.globalToLocal(Q3, Q3loc)
-    em_q12(aux,pml,s1,s2,q1,q2,q3,xi,xf,yi,yf,gxi,gxf,gyi,gyf)
+    fdtd_2d(aux,pml,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
     da.localToGlobal(Q1loc, Q1)
     da.localToGlobal(Q2loc, Q2)
 
