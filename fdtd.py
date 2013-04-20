@@ -8,14 +8,14 @@ petsc4py.init(sys.argv)
 import numpy as np
 
 # space
-xx = 1e-6, 
-yy = 500e-6, 
+xx = 1e-6 
+yy = 500e-6 
 
-ddx = 5e-9, 
+ddx = 5e-9 
 ddy = 5e-9
 
-nx = np.floor(xx/ddx)
-ny = np.floor(yy/ddy)
+nx = 35
+ny = 35
 
 # -------- GLOBAL SCALAR DEFINITIONS -----------------------------
 # ======== all definitions are in m,s,g unit system.
@@ -252,13 +252,15 @@ def qinit(Q1,Q2,Q3,da):
         #q3[-1,:] = 0.0
         pass
 
-def qbc(Q1=Q1,Q2=Q2,Q3=Q3,da=da,idim=0):
+def qbc(Q1,Q2,Q3,da):
     """
     Set the boundary conditions for q. Implemented conditions are:
 
     ..metallic:     set q = 0
     ..scattering:   scattering boundary conditions (line), set by function bc_scattering (user controlled)
-    ..cyclical:     not implemented 
+    ..periodic:     periodic boundary conditions            (not implemented)
+    ..neumann:      neumann boundary conditions             (not implemented)
+    ..rounded:      end boundary becomes beginning boundary (not implemented)
     """
     q1  = da.getVecArray(Q1)
     q2  = da.getVecArray(Q2)
@@ -268,28 +270,28 @@ def qbc(Q1=Q1,Q2=Q2,Q3=Q3,da=da,idim=0):
         q1[0,:] = 0.0
         q2[0,:] = 0.0
         q3[0,:] = 0.0
-    elif bc_x_lower == 'scattering'
+    elif bc_x_lower == 'scattering':
         q1[mx,:] = bc_scattering
 
     if bc_x_upper == 'metallic':
         q1[0,:] = 0.0
         q2[0,:] = 0.0
         q3[0,:] = 0.0
-    elif bc_x_lower == 'scattering'
+    elif bc_x_lower == 'scattering':
         q1[mx,:] = bc_scattering
 
     if bc_y_lower == 'metallic':
         q1[:,0] = 0.0
         q2[:,0] = 0.0
         q3[:,0] = 0.0
-    elif bc_x_lower == 'scattering'
+    elif bc_x_lower == 'scattering':
         q1[:,0] = bc_scattering
 
     if bc_y_upper == 'metallic':
         q1[:,my] = 0.0
         q2[:,my] = 0.0
         q3[:,my] = 0.0
-    elif bc_x_lower == 'scattering'
+    elif bc_x_lower == 'scattering':
         q1[:,my] = bc_scattering
 
 
@@ -299,7 +301,7 @@ def aux_bc_pml(pml,pml_type,xi,xf,yi,yf,gxi,gxf,gyi,gyf):
     """
     
     from build_pml import build_pml
-        build_pml(pml,pml_type,ddx,ddy,dt,norder,ro,co,xi,xf,yi,yf,gxi,gxf,gyi,gyf,mx,my)
+    build_pml(pml,pml_type,ddx,ddy,dt,norder,ro,co,xi,xf,yi,yf,gxi,gxf,gyi,gyf,mx,my)
 
 
 
@@ -307,7 +309,7 @@ def aux_bc_pml(pml,pml_type,xi,xf,yi,yf,gxi,gxf,gyi,gyf):
 
 from petsc4py import PETSc
 from fdtd_da_pml import em_da_pml_q3  as em_q3
-from fdtd_da_pml import em_da__pml_q12 as em_q12
+from fdtd_da_pml import em_da_pml_q12 as em_q12
 
 stype  = PETSc.DA.StencilType.STAR
 swidth = 1
@@ -335,20 +337,20 @@ s2  = np.zeros([gxf-gxi,gyf-gyi], order='F')
 s3  = np.zeros([gxf-gxi,gyf-gyi], order='F')
 s4  = np.zeros([gxf-gxi,gyf-gyi], order='F')
 
-aux = etar(num_aux,gxi,gxf,gyi,gyf,ddx,ddy)
-#aux = np.ones ([num_aux,gxf-gxi,gyf-gyi], order='F')
+#aux = etar(num_aux,gxi,gxf,gyi,gyf,ddx,ddy)
+aux = np.ones ([num_aux,gxf-gxi,gyf-gyi], order='F')
 
-da_pml = PETSc.DA().create([mx,my], dof=num_pml,
-                       stencil_type=stype,
-                       stencil_width=swidth)
+#da_pml = PETSc.DA().create([mx,my], dof=num_pml,
+#                       stencil_type=stype,
+#                       stencil_width=swidth)
 
-PML = da_pml.createGlobalVec()
-PMLloc = da_pml.createLocalVec()
+#PML = da_pml.createGlobalVec()
+#PMLloc = da_pml.createLocalVec()
 
-pml = PMLloc.getArray().reshape([num_pml,gxf-gxi,gyf-gyi], order='F')
+#pml = PMLloc.getArray().reshape([num_pml,gxf-gxi,gyf-gyi], order='F')
 
 
-#pml = np.ones ([num_pml,gxf-gxi,gyf-gyi], order='F')
+pml = np.ones ([num_pml,gxf-gxi,gyf-gyi], order='F')
 
 xi  += 1
 yi  += 1
@@ -361,7 +363,7 @@ root = da.comm.getRank() == 0
 
 for t in range(1,100):
     if t == 1: 
-        bc(Q1,Q2,Q3,da)
+        qinit(Q1,Q2,Q3,da)
 
     da.globalToLocal(Q1, Q1loc)
     da.globalToLocal(Q2, Q2loc)
