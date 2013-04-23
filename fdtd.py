@@ -33,7 +33,7 @@ mo = 4e-7*np.pi                 # vacuum peremeability  - [V.s/A.m]
 co = 1/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
 zo = np.sqrt(eo/mo)
 # material
-mat_shape = 'homogeneous'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_shape = 'vacuum'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 num_aux = 3
 # background refractive index
 bkg_er = 1.5
@@ -150,7 +150,7 @@ dydt = 1
 
 # -------- GLOBAL FUNCTION DEFINITIONS --------------
 
-def etar(num_aux,xi,xf,yi,yf,ddx,ddy):
+def etar(da,ddx,ddy,t=0):
     """
     eta = etar(num_aux,xi,xf,yi,yf,ddx,ddy)
 
@@ -167,7 +167,7 @@ def etar(num_aux,xi,xf,yi,yf,ddx,ddy):
 
 
     y,x are the point coordinates of the grid.
-
+    t is the time coordinate
 
     on output aux holds:
 
@@ -179,7 +179,8 @@ def etar(num_aux,xi,xf,yi,yf,ddx,ddy):
          2:     eta_3        |   eps3    mu3
 
     """
-
+    nx, ny = da.getSizes()
+    (xi, xf), (yi, yf) = da.getRanges()
     X = np.linspace(xi,xf,xf-xi)*ddx
     Y = np.linspace(yi,yf,yf-yi)*ddy
     y,x = np.meshgrid(Y,X)
@@ -201,6 +202,10 @@ def etar(num_aux,xi,xf,yi,yf,ddx,ddy):
         eta[0,:,:] = bkg_er
         eta[1,:,:] = bkg_er
         eta[2,:,:] = bkg_mr
+    elif mat_shape=='vacuum':
+        eta[0,:,:] = 1.0
+        eta[1,:,:] = 1.0
+        eta[2,:,:] = 1.0
     elif mat_shape=='interfacex':
         eta[0,:,:] = 1*(x<x_change) + 4*(x>=x_change)
         eta[1,:,:] = 1*(x<x_change) + 4*(x>=x_change)
@@ -370,7 +375,8 @@ s3  = np.zeros([xf-xi,yf-yi], order='F')
 s4  = np.zeros([xf-xi,yf-yi], order='F')
 
 #aux = etar(num_aux,gxi,gxf,gyi,gyf,ddx,ddy)
-aux = np.ones ([num_aux,xf-xi,yf-yi], order='F')
+#aux = np.ones ([num_aux,xf-xi,yf-yi], order='F')
+aux = etar(da,ddx,ddy)
 
 #da_pml = PETSc.DA().create([mx,my], dof=num_pml,
 #                       stencil_type=stype,
