@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 # ddd
-
+# sanity check for submodule working and pushing to...
 import sys, petsc4py
 petsc4py.init(sys.argv)
 
