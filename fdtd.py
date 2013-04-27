@@ -414,7 +414,7 @@ def write(Q1,Q2,Q3,filename):
 
 draw = PETSc.Viewer.DRAW()
 
-for t in range(1,10):
+for t in range(1,100):
     if t == 1:
         qinit(Q1,Q2,Q3,da)
         qbc(Q1,Q2,Q3,da)
@@ -431,7 +431,7 @@ for t in range(1,10):
 
     #bc(Q1,Q2,Q3)
     #Q3.view(draw)
-    #write(Q1,Q3,Q3,"step%d.dat" % t)
+    write(Q1,Q3,Q3,"step%d.dat" % t)
     prb.probe('Q1', Q1)
     prb.probe('Q2', Q2)
 
