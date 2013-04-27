@@ -396,11 +396,25 @@ aux_bc_pml(pml,pml_type,xi,xf,yi,yf,nx,ny)
 #    pylab.colorbar()
 #pylab.show()
 
-io   = PETSc.Viewer.BINARY()
-draw = PETSc.Viewer.DRAW()
-root = da.comm.getRank() == 0
+from probe import Probe
+entries=[[ 0, 0],
+         [34,10],
+         [34,34],
+         [10,34],
+         [0,15],
+         ]
+prb = Probe(da, entries)
 
-for t in range(1,100):
+def write(Q1,Q2,Q3,filename):
+    io = PETSc.Viewer().createBinary(filename,mode="w")
+    Q1.view(io)
+    Q2.view(io)
+    Q3.view(io)
+    io.destroy()
+
+draw = PETSc.Viewer.DRAW()
+
+for t in range(1,10):
     if t == 1:
         qinit(Q1,Q2,Q3,da)
         qbc(Q1,Q2,Q3,da)
@@ -416,7 +430,14 @@ for t in range(1,100):
     da.localToGlobal(Q2loc, Q2)
 
     #bc(Q1,Q2,Q3)
-    Q3.view(draw)
-    Q3.view(io)
+    #Q3.view(draw)
+    #write(Q1,Q3,Q3,"step%d.dat" % t)
+    prb.probe('Q1', Q1)
+    prb.probe('Q2', Q2)
+
+prb.save("probe.dat")
+#from pprint import pprint
+#pprint(prb.cache)
+#print prb.cache['Q2'][0,15]
 
 sys.exit()
