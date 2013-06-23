@@ -54,7 +54,7 @@ class Reader(object):
 
 if __name__ == "__main__":
     import sys
-    filename = sys.argv[1]
+    path = sys.argv[1]
     reader = Reader()
     Q1, Q2, Q3 = reader.read(filename)
 
