@@ -19,10 +19,14 @@ y_upper = 10.0e-6                   # notice that for multilayer this is value w
 # ........ material properties ...................................
 
 # vacuum
+vac      = np.ones([3])
 eo = 8.854187817e-12            # vacuum permittivity   - [F/m]
 mo = 4e-7*np.pi                 # vacuum peremeability  - [V.s/A.m]
 co = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
 zo = np.sqrt(mo/eo)
+vac[0] = eo
+vac[1] = eo
+vac[2] = mo 
 # material
 mat_shape = 'homogeneous'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 # parameters needed for pml calculation
@@ -131,11 +135,11 @@ ddy = (y_upper-y_lower)/ny
 ddt = dt=0.50/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
 dt = ddt
 t_final = (x_upper-x_lower)/v
-max_steps = np.floor(t_final/ddt)+1
+max_steps = 10000#np.floor(t_final/ddt)+1
 print t_final,ddx,ddy,ddt,max_steps
 
-dxdt = 1.0/ddx/ddt
-dydt = 1.0/ddx/ddt
+dxdt = dt/ddx
+dydt = dt/ddy
 
 
 # -------- GLOBAL FUNCTION DEFINITIONS --------------
@@ -221,6 +225,10 @@ def etar(da,ddx,ddy,t=0):
         eta_out[1,:,:] = layers[0,1]*(N_layers*tlp<y)*(y<=N_layers*tlp+layers[0,4])
         eta_out[2,:,:] = layers[0,2]*(N_layers*tlp<y)*(y<=N_layers*tlp+layers[0,4]) 
 
+    eta_out[0,:,:] = eta_out[0,:,:]*vac[0]
+    eta_out[1,:,:] = eta_out[1,:,:]*vac[1]
+    eta_out[2,:,:] = eta_out[2,:,:]*vac[2]
+
     return eta_out
 
 def qinit(Q1,Q2,Q3,da):
@@ -246,7 +254,6 @@ def qinit(Q1,Q2,Q3,da):
         q2[:,:] = zo*np.exp(-r2/(sdd**2))
         q3[:,:] = 1.0*np.exp(-r2/(sdd**2))
     else:
-        print 'off'
         q1[:,:] = 0.0
         q2[:,:] = 0.0
         q3[:,:] = 0.0
@@ -347,7 +354,7 @@ def bc_scattering(Q1,Q2,Q3,da,axis,side):
     q3  = da.getVecArray(Q3)
 
     if (axis,side) == (0,0) and xi == 0:
-        q2[0,:] = 1.0#zo*ex_amplitude[1]*pulseshape*harmonic
+        q2[0 ,:] = 1.0#zo*ex_amplitude[1]*pulseshape*harmonic
     if (axis,side) == (1,0) and yi == 0:
         q1[:, 0] = 0.0
     if (axis,side) == (0,1) and xf == nx-1:
@@ -459,12 +466,12 @@ for t in range(0,int(max_steps)):
 
     #bc(Q1,Q2,Q3)
     Q3.view(draw)
-    write(Q1,Q3,Q3,"./_test/step%d.dat" % t)
+    #write(Q1,Q3,Q3,"./_test/step%d.dat" % t)
     prb = gauges(da)
     prb.probe('Q1', Q1)
     prb.probe('Q2', Q2)
 
-prb.save("probe.dat")
+#prb.save("probe.dat")
 #from pprint import pprint
 #pprint(prb.cache)
 #print prb.cache['Q2'][0,15]
