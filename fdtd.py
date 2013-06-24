@@ -94,7 +94,7 @@ ex_amplitude = np.ones([3])
 ex_kvector   = np.zeros([2])
 
 # fill arrays and set respective values
-ex_type   = 'jump'
+ex_type   = 'plane'
 ex_lambda = 1e-6
 ex_sigma[0:1] = 1.0*ex_lambda
 ex_sigma[2]   = (y_upper-y_lower)/2.0
@@ -124,18 +124,18 @@ aux_bc_y_upper = 'metallic'
 v = co/bkg_n.min()
 
 # Grid - mesh settings
-nx = np.floor(10*(x_upper-x_lower)/ex_lambda)
+nx = np.floor(20*(x_upper-x_lower)/ex_lambda)
 if mat_shape=='multilayer':
     ny = np.floor((y_upper-y_lower)/1e-9)
 else:
-    ny = np.floor(10*(y_upper-y_lower)/ex_lambda)
+    ny = np.floor(20*(y_upper-y_lower)/ex_lambda)
 
 ddx = (x_upper-x_lower)/nx
 ddy = (y_upper-y_lower)/ny
 ddt = dt=0.50/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
 dt = ddt
 t_final = (x_upper-x_lower)/v
-max_steps = 10000#np.floor(t_final/ddt)+1
+max_steps = np.floor(t_final/ddt)+1
 print t_final,ddx,ddy,ddt,max_steps
 
 dxdt = dt/ddx
@@ -258,7 +258,7 @@ def qinit(Q1,Q2,Q3,da):
         q2[:,:] = 0.0
         q3[:,:] = 0.0
 
-def qbc(Q1,Q2,Q3,da):
+def qbc(Q1,Q2,Q3,da,t):
     """
     Set the boundary conditions for q. Implemented conditions are:
 
@@ -282,7 +282,7 @@ def qbc(Q1,Q2,Q3,da):
             q2[0,:] = 0.0
             q3[0,:] = 0.0
         elif bc_x_lower == 'scattering':
-            bc_scattering(Q1,Q2,Q3,da,0,0)
+            bc_scattering(Q1,Q2,Q3,da,t,0,0)
         elif bc_x_lower == 'none':
             pass
     if xi == nx-1:
@@ -291,7 +291,7 @@ def qbc(Q1,Q2,Q3,da):
             q2[-1,:] = 0.0
             q3[-1,:] = 0.0
         elif bc_x_upper == 'scattering':
-            bc_scattering(Q1,Q2,Q3,da,0,1)
+            bc_scattering(Q1,Q2,Q3,da,t,0,1)
         elif bc_x_upper == 'none':
             pass
     if yi == 0:
@@ -300,7 +300,7 @@ def qbc(Q1,Q2,Q3,da):
             q2[:,0] = 0.0
             q3[:,0] = 0.0
         elif bc_y_lower == 'scattering':
-            bc_scattering(Q1,Q2,Q3,da,1,0)
+            bc_scattering(Q1,Q2,Q3,da,t,1,0)
         elif bc_y_lower == 'none':
             pass
     if yf == ny-1:
@@ -309,11 +309,11 @@ def qbc(Q1,Q2,Q3,da):
             q2[:,-1] = 0.0
             q3[:,-1] = 0.0
         elif bc_y_upper == 'scattering':
-            bc_scattering(Q1,Q2,Q3,da,1,1)
+            bc_scattering(Q1,Q2,Q3,da,t,1,1)
         elif bc_y_upper == 'none':
             pass
 
-def bc_scattering(Q1,Q2,Q3,da,axis,side):
+def bc_scattering(Q1,Q2,Q3,da,t,axis,side):
     """
     Boundary scattering conditions (source)
     """
@@ -354,7 +354,8 @@ def bc_scattering(Q1,Q2,Q3,da,axis,side):
     q3  = da.getVecArray(Q3)
 
     if (axis,side) == (0,0) and xi == 0:
-        q2[0 ,:] = 1.0#zo*ex_amplitude[1]*pulseshape*harmonic
+        q2[0 ,:] = zo*ex_amplitude[1]*pulseshape*harmonic
+        q3[0 ,:] = ex_amplitude[1]*pulseshape*harmonic
     if (axis,side) == (1,0) and yi == 0:
         q1[:, 0] = 0.0
     if (axis,side) == (0,1) and xf == nx-1:
@@ -449,18 +450,21 @@ aux_bc_pml(pml,pml_type,xi,xf,yi,yf,nx,ny)
 #pylab.show()
 
 draw = PETSc.Viewer.DRAW()
-for t in range(0,int(max_steps)):
-    if t == 0:
+for n in range(0,int(max_steps)):
+    if n == 0:
+        t = n*dt
         qinit(Q1,Q2,Q3,da)
-        qbc(Q1,Q2,Q3,da)
-
+        qbc(Q1,Q2,Q3,da,t)
+    t = n*dt
+    bc_scattering(Q1,Q2,Q3,da,t,0,0)
+    bc_scattering(Q1,Q2,Q3,da,t,1,0)
     da.globalToLocal(Q1, Q1loc)
     da.globalToLocal(Q2, Q2loc)
-    fdtd_2d(aux,pml,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
+    fdtd_2d(aux,pml,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,0)
     da.localToGlobal(Q3loc, Q3)
 
     da.globalToLocal(Q3, Q3loc)
-    fdtd_2d(aux,pml,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
+    fdtd_2d(aux,pml,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,0)
     da.localToGlobal(Q1loc, Q1)
     da.localToGlobal(Q2loc, Q2)
 
