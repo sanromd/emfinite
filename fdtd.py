@@ -28,7 +28,7 @@ vac[0] = eo
 vac[1] = eo
 vac[2] = mo 
 # material
-mat_shape = 'homogeneous'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_shape = 'multilayer'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 # parameters needed for pml calculation
 num_pml = 8
 norder = 3
@@ -64,21 +64,20 @@ delta_eta = np.zeros([3])
 delta_eta = 0.1*eta
 
 # set multilayer parameters
-n_layers = 2
-layers = np.zeros([n_layers,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
-layers[0,0] = 1.5
-layers[0,1] = 1.5
-layers[0,2] = 1.5
+num_materials = 2
+num_layers = 10
+
+layers = np.zeros([num_materials,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
+
+layers[0,0:3] = 1.0
+layers[1,0:3] = 2.5
 layers[0,3] = 10
-layers[0,4] = 15e-9
-layers[1,0] = 2.5
-layers[1,1] = 2.5
-layers[1,2] = 2.5
 layers[1,3] = layers[0,3] - 1
-layers[1,4] = 50e-9
-N_layers = 5
+layers[0,4] = 15.0e-9
+layers[1,4] = 50.0e-9
+
 if mat_shape=='multilayer':
-    y_upper = N_layers*np.sum(layers[:,4])+layers[0,4]
+    y_upper = num_layers*np.sum(layers[:,4])+layers[0,4]
     tlp = np.sum(layers[:,4])
     mlp = np.floor(tlp/1e-9)
 
@@ -177,8 +176,9 @@ def etar(da,ddx,ddy,t=0):
     (xi, xf), (yi, yf) = da.getRanges()
     X = np.linspace(xi,xf,xf-xi)*ddx
     Y = np.linspace(yi,yf,yf-yi)*ddy
+    print X
     y,x = np.meshgrid(Y,X)
-    eta_out = np.empty( [3,len(X),len(Y)], order='F')
+    eta_out = np.ones( [3,len(X),len(Y)], order='F')
 
     if mat_shape=='gaussian1dx':
         u_x_eta1 = x - rip_velocity[0,0]*t - rip_offset[0,0]
@@ -208,22 +208,22 @@ def etar(da,ddx,ddy,t=0):
         eta_out[1,:,:] = 1*(y<y_change/2) + 4*(x>=y_change/2)
         eta_out[2,:,:] = 1*(y<y_change/2) + 4*(x>=y_change/2)
     elif mat_shape=='multilayer':
-        for n in range(0,N_layers):
-            yi = n*tlp
-            for m in range(0,n_layers):
+        yi = np.arange(0,num_layers+1)*tlp
+        for i in range(0,num_layers+1):
+            for m in range(0,num_materials):
                 if m==0:
-                    eta_out[0,:,:] = layers[m,0]*(yi<y)*(y<=yi+layers[m,3])
-                    eta_out[1,:,:] = layers[m,1]*(yi<y)*(y<=yi+layers[m,3])
-                    eta_out[2,:,:] = layers[m,2]*(yi<y)*(y<=yi+layers[m,3])
+                    eta_out[0,:,:] += layers[0,0]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
+                    eta_out[1,:,:] += layers[0,1]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
+                    eta_out[2,:,:] += layers[0,2]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
                 else:
-                    eta_out[0,:,:] = layers[m,0]*(yi+layers[m-1,3]<y)*(y<=yi+layers[m,3])
-                    eta_out[1,:,:] = layers[m,1]*(yi+layers[m-1,3]<y)*(y<=yi+layers[m,3])
-                    eta_out[2,:,:] = layers[m,2]*(yi+layers[m-1,3]<y)*(y<=yi+layers[m,3])
+                    eta_out[0,:,:] += layers[m,0]*(y>=(yi[i]+layers[m-1,4]))*(y<=(yi[i]+layers[m,4]))
+                    eta_out[1,:,:] += layers[m,1]*(y>=(yi[i]+layers[m-1,4]))*(y<=(yi[i]+layers[m,4]))
+                    eta_out[2,:,:] += layers[m,2]*(y>=(yi[i]+layers[m-1,4]))*(y<=(yi[i]+layers[m,4]))
 
 
-        eta_out[0,:,:] = layers[0,0]*(N_layers*tlp<y)*(y<=N_layers*tlp+layers[0,4])
-        eta_out[1,:,:] = layers[0,1]*(N_layers*tlp<y)*(y<=N_layers*tlp+layers[0,4])
-        eta_out[2,:,:] = layers[0,2]*(N_layers*tlp<y)*(y<=N_layers*tlp+layers[0,4]) 
+        eta_out[0,:,:] = layers[0,0]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
+        eta_out[1,:,:] = layers[0,1]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
+        eta_out[2,:,:] = layers[0,2]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4]) 
 
     eta_out[0,:,:] = eta_out[0,:,:]*vac[0]
     eta_out[1,:,:] = eta_out[1,:,:]*vac[1]
@@ -442,12 +442,12 @@ pml_axis = 0
 pml_side = 1
 pml_type = pml_axis*2+pml_side
 aux_bc_pml(pml,pml_type,xi,xf,yi,yf,nx,ny)
-#from matplotlib import pylab
+from matplotlib import pylab
 #for i in range(8):
-#    pylab.figure()
-#    pylab.contourf(pml[i,:,:].copy())
-#    pylab.colorbar()
-#pylab.show()
+pylab.figure()
+pylab.contourf(aux[1,:,:].copy())
+pylab.colorbar()
+pylab.show()
 
 draw = PETSc.Viewer.DRAW()
 for n in range(0,int(max_steps)):
