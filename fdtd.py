@@ -13,7 +13,7 @@ import numpy as np
 n_frames = 30
 # ....... dimensions .............................................
 x_lower = 0.0
-x_upper = 100.0e-6                    # lenght [m]
+x_upper = 10.0e-6                    # lenght [m]
 y_lower = 0.0
 y_upper = 10.0e-6                   # notice that for multilayer this is value will be over-written
 # ........ material properties ...................................
@@ -90,7 +90,7 @@ ex_amplitude = np.ones([3])
 ex_kvector   = np.zeros([2])
 
 # fill arrays and set respective values
-ex_type   = 'plane'
+ex_type   = 'jump'
 ex_lambda = 1e-6
 ex_sigma[0:1] = 1.0*ex_lambda
 ex_sigma[2]   = (y_upper-y_lower)/2.0
@@ -126,15 +126,16 @@ if mat_shape=='multilayer':
 else:
     ny = np.floor(10*(y_upper-y_lower)/ex_lambda)
 
-ddx = (x_upper-x_lower)/mx
-ddy = (y_upper-y_lower)/my
+ddx = (x_upper-x_lower)/nx
+ddy = (y_upper-y_lower)/ny
 ddt = dt=0.50/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
-max_steps = 1000000
+dt = ddt
 t_final = (x_upper-x_lower)/v
-print t_final
+max_steps = np.floor(t_final/ddt)+1
+print t_final,ddx,ddy,ddt,max_steps
 
-dxdt = 1
-dydt = 1
+dxdt = 1.0/ddx/ddt
+dydt = 1.0/ddx/ddt
 
 
 # -------- GLOBAL FUNCTION DEFINITIONS --------------
@@ -240,11 +241,12 @@ def qinit(Q1,Q2,Q3,da):
         dd1 = x_upper-x_lower
         dd2 = y_upper-y_lower
         sdd = ex_lambda
-        r2 = (x-dd1/2.0)**2 #+ (y-dd2/2.0)**2
+        r2 = (x-dd1/2.0)**2 + (y-dd2/2.0)**2
         q1[:,:] = 0.0
         q2[:,:] = zo*np.exp(-r2/(sdd**2))
         q3[:,:] = 1.0*np.exp(-r2/(sdd**2))
     else:
+        print 'off'
         q1[:,:] = 0.0
         q2[:,:] = 0.0
         q3[:,:] = 0.0
@@ -345,9 +347,7 @@ def bc_scattering(Q1,Q2,Q3,da,axis,side):
     q3  = da.getVecArray(Q3)
 
     if (axis,side) == (0,0) and xi == 0:
-        q1[:,:] = 0.0
-        q2[:,:] = zo*ex_amplitude[1]*pulseshape*harmonic
-        q3[:,:] = ex_amplitude[1]*pulseshape*harmonic
+        q2[0,:] = 1.0#zo*ex_amplitude[1]*pulseshape*harmonic
     if (axis,side) == (1,0) and yi == 0:
         q1[:, 0] = 0.0
     if (axis,side) == (0,1) and xf == nx-1:
@@ -442,9 +442,8 @@ aux_bc_pml(pml,pml_type,xi,xf,yi,yf,nx,ny)
 #pylab.show()
 
 draw = PETSc.Viewer.DRAW()
-
-for t in range(1,100):
-    if t == 1:
+for t in range(0,int(max_steps)):
+    if t == 0:
         qinit(Q1,Q2,Q3,da)
         qbc(Q1,Q2,Q3,da)
 
@@ -459,8 +458,9 @@ for t in range(1,100):
     da.localToGlobal(Q2loc, Q2)
 
     #bc(Q1,Q2,Q3)
-    #Q3.view(draw)
-    write(Q1,Q3,Q3,"step%d.dat" % t)
+    Q3.view(draw)
+    write(Q1,Q3,Q3,"./_test/step%d.dat" % t)
+    prb = gauges(da)
     prb.probe('Q1', Q1)
     prb.probe('Q2', Q2)
 
