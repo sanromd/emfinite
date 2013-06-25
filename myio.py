@@ -59,7 +59,7 @@ if __name__ == "__main__":
     Q1, Q2, Q3 = reader.read(filename)
 
     from matplotlib import pylab
-    nx, ny = 35, 35
+    nx, ny = 1000, 221
     x, y = np.mgrid[0:1:1j*nx, 0:1:1j*ny]
     q1 = Q1.reshape([nx,ny], order='F')
     q2 = Q2.reshape([nx,ny], order='F')
