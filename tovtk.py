@@ -1,7 +1,7 @@
 import sys, os
 from glob import glob
 import numpy as np
-from io import Reader
+from myio import Reader
 
 def read(filename):
     reader = Reader()
@@ -11,13 +11,6 @@ def read(filename):
     q2 = Q2.reshape([nx,ny], order='F')
     q3 = Q3.reshape([nx,ny], order='F')
 
-nx, ny = 35, 35
-
-coordinates = [np.linspace(0,1,nx),
-               np.linspace(0,1,ny),
-               np.ones(1),
-               ]
-dimensions = (nx, ny, 1) 
 
 def tovtk(q1,q2,q3,filename):
     scalars = [("Q1", q1),
@@ -82,8 +75,21 @@ def tovtk(q1,q2,q3,filename):
     fh.flush()
     fh.close()
 
+if __name__ == "__main__":
+    import sys
+    path = sys.argv[1]
+    nx = int(sys.argv[2])
+    ny = int(sys.argv[3])
+    print nx,ny    
+    # nx, ny = 1000, 221
 
-for filename in glob("step*.dat"):
-    q1,q2,q3 = read(filename)
-    vtkname = filename.replace('.dat', '.vtk')
-    tovtk(q1,q2,q3,vtkname)
+    coordinates = [np.linspace(0,1,nx),
+                   np.linspace(0,1,ny),
+                   np.ones(1),
+                   ]
+    dimensions = (nx, ny, 1) 
+
+    for filename in glob(path+'/step*.dat'):
+        q1,q2,q3 = read(filename)
+        vtkname = filename.replace('.dat', '.vtk')
+        tovtk(q1,q2,q3,vtkname)

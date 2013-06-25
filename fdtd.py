@@ -2,15 +2,27 @@
 # encoding: utf-8
 # ddd
 # sanity check for submodule working and pushing to...
-import sys, petsc4py
+import sys, petsc4py, os
 petsc4py.init(sys.argv)
-
+import pickle as pkl
 import numpy as np
 
 # -------- GLOBAL SCALAR DEFINITIONS -----------------------------
 
+n_frames    = 100
+save_outdir = './_test/'
+save_name   = 'test'
+liveview    = True
+write_q     = False
+write_aux   = False
+gauge       = False
+write_gauge = False
+mode        = 'TM'
+debug_eta   = False
+debug_auxbc = False
+vaccum_ones = False
+
 # ======== all definitions are in m,s,g unit system.
-n_frames = 30
 # ....... dimensions .............................................
 x_lower = 0.0
 x_upper = 10.0e-6                    # lenght [m]
@@ -19,126 +31,140 @@ y_upper = 10.0e-6                   # notice that for multilayer this is value w
 # ........ material properties ...................................
 
 # vacuum
-vac      = np.ones([3])
-eo = 8.854187817e-12            # vacuum permittivity   - [F/m]
-mo = 4e-7*np.pi                 # vacuum peremeability  - [V.s/A.m]
-co = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
-zo = np.sqrt(mo/eo)
-vac[0] = eo
-vac[1] = eo
-vac[2] = mo 
+vac     = np.ones([3])
+if vaccum_ones:
+    eo  = 1.0
+    mo  = 1.0
+else:
+    eo  = 8.854187817e-12            # vacuum permittivity   - [F/m]
+    mo  = 4e-7*np.pi                 # vacuum peremeability  - [V.s/A.m]
+
+co      = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
+zo      = np.sqrt(mo/eo)
+
 # material
-mat_shape = 'multilayer'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
-# parameters needed for pml calculation
-num_pml = 8
-norder = 3
-Ro = 1.0e-6
+mat_shape       = 'homogeneous'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_nonliner    = False
 
-# initialize background refractive index and etas
-eta      = np.ones([3])
-bkg_n    = np.ones([2])
+# initialize material properties and fill with default values (this should become class material)
+if mat_shape == 'interface' or 'interfacex' or 'interfacey':
+    eta             = np.ones([2,3])
+    eta[0,:]        = 1.0
+    eta[1,:]        = 2.0
+    if mat_shape == 'interfacex':
+        mat_change        = (x_upper-x_lower)/2.0
+    else:
+        mat_change        = (y_upper-y_lower)/2.0
+if mat_shape == 'gaussian1dx':
+    eta             = np.ones([3])
+    delta_eta       = np.zeros([3])
+    eta_velocity    = np.zeros([2,3])
+    eta_offset      = np.zeros([2,3])
+    eta_sigma       = np.zeros([2,3])
+    delta_eta       = np.zeros([3])
+    # once the material class is created the settings below should be created as defaults
+    eta             = eta*1.5
+    delta_eta       = 0.1*eta
+    eta_offset[0,:].fill((x_upper-x_lower)/2.0)
+    eta_offset[1,:].fill((y_upper-y_lower)/2.0)
+    eta_sigma[0,:].fill((x_upper-x_lower)/25.0)
+    eta_sigma[1,:].fill((y_upper-y_lower)/25.0)
+    eta_sigma.fill(10e-6)
+    eta_sigma.fill(10e-6)
+if mat_shape == 'multilayer':
+    num_materials   = 2
+    num_layers      = 10
+    layers          = np.zeros([num_materials,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
+    layers[0,0:3]   = 1.0
+    layers[1,0:3]   = 2.0
+    layers[0,3]     = 10
+    layers[1,3]     = layers[0,3] - 1
+    layers[0,4]     = 15.0e-9
+    layers[1,4]     = 50.0e-9
+if mat_shape =='homogeneous':
+    eta             = np.ones([3])*1.5
+    print 'this is eta',eta
 
-bkg_n[0] = np.sqrt(eta[0]*eta[2])
-bkg_n[1] = np.sqrt(eta[1]*eta[2])
+if mat_nonliner:
+    chi2 = chi3 = np.zeros( [3], order='F')
+
+# ........ excitation - initial conditoons .......................
+
+# pre-allocate arrays
+ex_sigma        = np.ones([3])    # x,y,t
+ex_offset       = np.zeros([3])
+ex_amplitude    = np.ones([3])
+ex_kvector      = np.zeros([2])
+
+# fill arrays and set respective values
+ex_type         = 'plane'
+ex_lambda       = 1e-6
+ex_sigma[0:1]   = 1.0*ex_lambda
+ex_sigma[2]     = (y_upper-y_lower)/2.0
+ex_offset[2]    = (y_upper-y_lower)/2.0
 
 
-# if interface declare position
-x_change = (x_upper-x_lower)/2.0
-y_change = (y_upper-y_lower)/2.0
 
-# set moving refractive index or gaussian2D parameters
-rip_velocity = np.zeros([2,3])
-rip_offset   = np.zeros([2,3])
-rip_sigma    = np.zeros([2,3])
-delta_eta    = np.zeros([3])
+# ........ Boundary settings settings .................
+bc_lower = ['scattering', 'scattering'] # left and bottom boundary contidions
+bc_upper = ['none', 'none'] # right and bootom
 
-rip_offset[0,:].fill((x_upper-x_lower)/2.0)
-rip_offset[1,:].fill((y_upper-y_lower)/2.0)
-rip_sigma[0,:].fill((x_upper-x_lower)/25.0)
-rip_sigma[1,:].fill((y_upper-y_lower)/25.0)
-rip_sigma.fill(10e-6)
-rip_sigma.fill(10e-6)
-rip_sigma2 = rip_sigma**2
+aux_bc_lower = ['none', 'none'] # left and bottom boundary contidions
+aux_bc_upper = ['pml', 'none'] # right and bootom
 
-delta_eta = np.zeros([3])
-delta_eta = 0.1*eta
+# ........ pre-calculations for wave propagation .................
 
-# set multilayer parameters
-num_materials = 2
-num_layers = 10
+# Wave propagation calculations
+omega    = 2.0*np.pi*co/ex_lambda   # frequency
+k        = 2.0*np.pi/ex_lambda      # k vector magnitude
+ex_kvector[0] = k                   # propagation along the x-direction
 
-layers = np.zeros([num_materials,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
+# get the minimum speed in the medium
+v = np.zeros([2])
+if mat_shape == 'gaussian1dx':
+    v[0] = co/(eta.max()+delta_eta.max())
+    v[1] = co/(eta.min())
+elif mat_shape == 'multilayer':
+    v[0] = co/(layers[:,0:3].max())
+    v[1] = co/(layers[:,0:3].min())
+elif mat_shape == 'interface' or 'interfacex' or 'interfacey':
+    v[0] = co/(eta.max())
+    v[1] = co/(eta.min())
+elif mat_shape == 'homogeneous':
+    v[0] = v[1] = co/(eta.max())
 
-layers[0,0:3] = 1.0
-layers[1,0:3] = 2.5
-layers[0,3] = 10
-layers[1,3] = layers[0,3] - 1
-layers[0,4] = 15.0e-9
-layers[1,4] = 50.0e-9
+
+# Grid - mesh settings
+nx = np.floor(20*(x_upper-x_lower)/ex_lambda)
 
 if mat_shape=='multilayer':
     y_upper = num_layers*np.sum(layers[:,4])+layers[0,4]
     tlp = np.sum(layers[:,4])
     mlp = np.floor(tlp/1e-9)
-
-# set non-linear parameters of the material
-chi2 = chi3 = np.zeros( [3], order='F')
-
-# ........ excitation - initial conditoons .......................
-
-# pre-allocate arrays
-ex_sigma     = np.ones([3])    # x,y,t
-ex_offset    = np.zeros([3])
-ex_amplitude = np.ones([3])
-ex_kvector   = np.zeros([2])
-
-# fill arrays and set respective values
-ex_type   = 'plane'
-ex_lambda = 1e-6
-ex_sigma[0:1] = 1.0*ex_lambda
-ex_sigma[2]   = (y_upper-y_lower)/2.0
-ex_offset[2]  = (y_upper-y_lower)/2.0
-
-# post calculations
-omega    = 2.0*np.pi*co/ex_lambda   # frequency
-k        = 2.0*np.pi/ex_lambda      # k vector magnitude
-ex_kvector[0] = k                   # propagation along the x-direction
-
-# ........ Boundary settings settings .................
-
-bc_x_lower = 'scattering'
-bc_x_upper = 'none'
-bc_y_lower = 'scattering'
-bc_y_upper = 'none'
-
-aux_bc_x_lower = 'scattering'
-aux_bc_x_upper = 'pml'
-aux_bc_y_upper = 'metallic'
-aux_bc_y_upper = 'metallic'
-
-
-
-# ........ pre-calculations for wave propagation .................
-
-v = co/bkg_n.min()
-
-# Grid - mesh settings
-nx = np.floor(20*(x_upper-x_lower)/ex_lambda)
-if mat_shape=='multilayer':
-    ny = np.floor((y_upper-y_lower)/1e-9)
+    ny = np.floor((y_upper-y_lower)/2.5e-9)
 else:
     ny = np.floor(20*(y_upper-y_lower)/ex_lambda)
 
 ddx = (x_upper-x_lower)/nx
 ddy = (y_upper-y_lower)/ny
 ddt = dt=0.50/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
-dt = ddt
-t_final = (x_upper-x_lower)/v
-max_steps = np.floor(t_final/ddt)+1
-print t_final,ddx,ddy,ddt,max_steps
 
+dt = ddt
+t_final = (x_upper-x_lower)/v.min()
+max_steps = np.floor(t_final/ddt)+1
+n_write = np.floor(max_steps/n_frames)
+
+print nx,ny, t_final,max_steps,n_write
 dxdt = dt/ddx
 dydt = dt/ddy
+
+if mode == 'TM':
+    vac[0]  = eo
+    vac[1]  = eo
+    vac[2]  = mo
+else:
+    print 'TE mode not implemented ---  self-destructing (!)'
+    1/0
 
 
 # -------- GLOBAL FUNCTION DEFINITIONS --------------
@@ -176,21 +202,21 @@ def etar(da,ddx,ddy,t=0):
     (xi, xf), (yi, yf) = da.getRanges()
     X = np.linspace(xi,xf,xf-xi)*ddx
     Y = np.linspace(yi,yf,yf-yi)*ddy
-    print X
     y,x = np.meshgrid(Y,X)
-    eta_out = np.ones( [3,len(X),len(Y)], order='F')
+    eta_out = np.zeros( [3,len(X),len(Y)], order='F')
+    eta_temp = eta_out.copy()
 
     if mat_shape=='gaussian1dx':
-        u_x_eta1 = x - rip_velocity[0,0]*t - rip_offset[0,0]
-        u_x_eta2 = x - rip_velocity[0,1]*t - rip_offset[0,1]
-        u_x_eta3 = x - rip_velocity[0,2]*t - rip_offset[0,2]
-        u_y_eta1 = y - rip_velocity[1,0]*t - rip_offset[1,0]
-        u_y_eta2 = y - rip_velocity[1,1]*t - rip_offset[1,1]
-        u_y_eta3 = y - rip_velocity[1,2]*t - rip_offset[1,2]
+        u_x_eta1 = x - eta_velocity[0,0]*t - eta_offset[0,0]
+        u_x_eta2 = x - eta_velocity[0,1]*t - eta_offset[0,1]
+        u_x_eta3 = x - eta_velocity[0,2]*t - eta_offset[0,2]
+        u_y_eta1 = y - eta_velocity[1,0]*t - eta_offset[1,0]
+        u_y_eta2 = y - eta_velocity[1,1]*t - eta_offset[1,1]
+        u_y_eta3 = y - eta_velocity[1,2]*t - eta_offset[1,2]
 
-        u_eta1 = (u_x_eta1/rip_sigma[0,0])**2 + (u_y_eta1/rip_sigma[1,0])**2
-        u_eta2 = (u_x_eta2/rip_sigma[0,1])**2 + (u_y_eta2/rip_sigma[1,1])**2
-        u_eta3 = (u_x_eta3/rip_sigma[0,2])**2 + (u_y_eta3/rip_sigma[1,2])**2
+        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2 + (u_y_eta1/eta_sigma[1,0])**2
+        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2 + (u_y_eta2/eta_sigma[1,1])**2
+        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2 + (u_y_eta3/eta_sigma[1,2])**2
 
         eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1) + eta[0]
         eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2) + eta[1]
@@ -199,31 +225,31 @@ def etar(da,ddx,ddy,t=0):
         eta_out[0,:,:] = eta[0]
         eta_out[1,:,:] = eta[1]
         eta_out[2,:,:] = eta[2]
-    elif mat_shape=='interfacex':
-        eta_out[0,:,:] = 1*(x<x_change) + 4*(x>=x_change)
-        eta_out[1,:,:] = 1*(x<x_change) + 4*(x>=x_change)
-        eta_out[2,:,:] = 1*(x<x_change) + 4*(x>=x_change)
+    elif mat_shape=='interfacex' or 'interface':
+        eta_out[0,:,:] = eta[0,0]*(x<mat_change) + eta[1,0]*(x>=mat_change)
+        eta_out[1,:,:] = eta[0,1]*(x<mat_change) + eta[1,1]*(x>=mat_change)
+        eta_out[2,:,:] = eta[0,2]*(x<mat_change) + eta[1,2]*(x>=mat_change)
     elif mat_shape=='interfacey':
-        eta_out[0,:,:] = 1*(y<y_change/2) + 4*(x>=y_change/2)
-        eta_out[1,:,:] = 1*(y<y_change/2) + 4*(x>=y_change/2)
-        eta_out[2,:,:] = 1*(y<y_change/2) + 4*(x>=y_change/2)
+        eta_out[0,:,:] = eta[0,0]*(y<mat_change) + eta[1,0]*(y>=mat_change)
+        eta_out[1,:,:] = eta[0,1]*(y<mat_change) + eta[1,1]*(y>=mat_change)
+        eta_out[2,:,:] = eta[0,2]*(y<mat_change) + eta[1,2]*(y>=mat_change)
     elif mat_shape=='multilayer':
         yi = np.arange(0,num_layers+1)*tlp
-        for i in range(0,num_layers+1):
-            for m in range(0,num_materials):
+        for m in range(0,num_materials):
+            for i in range(0,num_layers+1):
                 if m==0:
-                    eta_out[0,:,:] += layers[0,0]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
-                    eta_out[1,:,:] += layers[0,1]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
-                    eta_out[2,:,:] += layers[0,2]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
+                    eta_temp[0,:,:] = eta_out[0,:,:] + layers[0,0]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
+                    eta_temp[1,:,:] = eta_out[1,:,:] + layers[0,1]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
+                    eta_temp[2,:,:] = eta_out[2,:,:] + layers[0,2]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
                 else:
-                    eta_out[0,:,:] += layers[m,0]*(y>=(yi[i]+layers[m-1,4]))*(y<=(yi[i]+layers[m,4]))
-                    eta_out[1,:,:] += layers[m,1]*(y>=(yi[i]+layers[m-1,4]))*(y<=(yi[i]+layers[m,4]))
-                    eta_out[2,:,:] += layers[m,2]*(y>=(yi[i]+layers[m-1,4]))*(y<=(yi[i]+layers[m,4]))
+                    eta_temp[0,:,:] = eta_out[0,:,:] + layers[m,0]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))
+                    eta_temp[1,:,:] = eta_out[1,:,:] + layers[m,1]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))
+                    eta_temp[2,:,:] = eta_out[2,:,:] + layers[m,2]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))
 
-
-        eta_out[0,:,:] = layers[0,0]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
-        eta_out[1,:,:] = layers[0,1]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
-        eta_out[2,:,:] = layers[0,2]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4]) 
+                eta_out = eta_temp.copy()
+        # eta_out[0,:,:] += layers[0,0]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
+        # eta_out[1,:,:] += layers[0,1]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
+        # eta_out[2,:,:] += layers[0,2]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4]) 
 
     eta_out[0,:,:] = eta_out[0,:,:]*vac[0]
     eta_out[1,:,:] = eta_out[1,:,:]*vac[1]
@@ -248,8 +274,8 @@ def qinit(Q1,Q2,Q3,da):
         y,x = np.meshgrid(Y,X)
         dd1 = x_upper-x_lower
         dd2 = y_upper-y_lower
-        sdd = ex_lambda
-        r2 = (x-dd1/2.0)**2 + (y-dd2/2.0)**2
+        sdd = 5.0*ex_lambda
+        r2 = (x-dd1/2.0)**2 #+ (y-dd2/2.0)**2
         q1[:,:] = 0.0
         q2[:,:] = zo*np.exp(-r2/(sdd**2))
         q3[:,:] = 1.0*np.exp(-r2/(sdd**2))
@@ -262,12 +288,13 @@ def qbc(Q1,Q2,Q3,da,t):
     """
     Set the boundary conditions for q. Implemented conditions are:
 
-    ..metallic:     set all qs to 0
-    ..scattering:   scattering boundary conditions (line), set by function bc_scattering (user controlled)
-    ..periodic:     periodic boundary conditions            (not implemented)
-    ..neumann:      neumann boundary conditions             (not implemented)
-    ..rounded:      end boundary becomes beginning boundary (not implemented)
-    ..none:         pass, does not set any value
+    .. metallic:     set all qs to 0
+    .. scattering:   scattering boundary conditions (line), set by function bc_scattering (user controlled)
+    .. pml
+    .. periodic:     periodic boundary conditions            (not implemented)
+    .. neumann:      neumann boundary conditions             (not implemented)
+    .. rounded:      end boundary becomes beginning boundary (not implemented)
+    .. none:         pass, does not set any value
     """
     nx, ny = da.getSizes()
     (xi, xf), (yi, yf) = da.getRanges()
@@ -277,41 +304,97 @@ def qbc(Q1,Q2,Q3,da,t):
     q3  = da.getVecArray(Q3)
 
     if xi == 0:
-        if bc_x_lower == 'metallic':
+        if bc_lower[0] == 'metallic':
             q1[0,:] = 0.0
             q2[0,:] = 0.0
             q3[0,:] = 0.0
-        elif bc_x_lower == 'scattering':
+        elif bc_lower[0] == 'scattering':
             bc_scattering(Q1,Q2,Q3,da,t,0,0)
-        elif bc_x_lower == 'none':
+        elif bc_lower[0] == 'custom':
+            bc_custom()           
+        elif bc_lower[0] == 'none':
             pass
     if xi == nx-1:
-        if bc_x_upper == 'metallic':
+        if bc_upper[0] == 'metallic':
             q1[-1,:] = 0.0
             q2[-1,:] = 0.0
             q3[-1,:] = 0.0
-        elif bc_x_upper == 'scattering':
+        elif bc_upper[0] == 'scattering':
             bc_scattering(Q1,Q2,Q3,da,t,0,1)
-        elif bc_x_upper == 'none':
+        elif bc_upper[0] == 'custom':
+            bc_custom()
+        elif bc_upper[0] == 'none':
             pass
     if yi == 0:
-        if bc_y_lower == 'metallic':
+        if bc_lower[1] == 'metallic':
             q1[:,0] = 0.0
             q2[:,0] = 0.0
             q3[:,0] = 0.0
-        elif bc_y_lower == 'scattering':
+        elif bc_lower[1] == 'scattering':
             bc_scattering(Q1,Q2,Q3,da,t,1,0)
-        elif bc_y_lower == 'none':
+        elif bc_lower[1] == 'custom':
+            bc_custom()
+        elif bc_lower[1] == 'none':
             pass
     if yf == ny-1:
-        if bc_y_upper == 'metallic':
+        if bc_upper[1] == 'metallic':
             q1[:,-1] = 0.0
             q2[:,-1] = 0.0
             q3[:,-1] = 0.0
-        elif bc_y_upper == 'scattering':
+        elif bc_upper[1] == 'scattering':
             bc_scattering(Q1,Q2,Q3,da,t,1,1)
-        elif bc_y_upper == 'none':
+        elif bc_upper[1] == 'custom':
+            bc_custom()
+        elif bc_upper[1] == 'none':
             pass
+
+def auxbc(da):
+    num_pml = 8
+    nx, ny = da.getSizes()
+    (xi, xf), (yi, yf) = da.getRanges()
+    temp_aux_bc = np.ones ([num_pml,xf-xi,yf-yi], order='F')
+
+    if aux_bc_lower[0] == 'pml':
+        pml_axis = 0
+        pml_side = 0
+        pml_type = pml_axis*2+pml_side
+        aux_bc_pml(temp_aux_bc,pml_type,xi,xf,yi,yf,nx,ny)
+    elif aux_bc_lower[0] == 'custom':
+        aux_bc_custom(temp_aux_bc)
+    else:
+        pass
+
+    if aux_bc_lower[1] == 'pml':
+        pml_axis = 1
+        pml_side = 0
+        pml_type = pml_axis*2+pml_side
+        aux_bc_pml(temp_aux_bc,pml_type,xi,xf,yi,yf,nx,ny)
+    elif aux_bc_lower[1] == 'custom':
+        aux_bc_custom(temp_aux_bc)
+    else:
+        pass
+
+    if aux_bc_upper[0] == 'pml':
+        pml_axis = 0
+        pml_side = 1
+        pml_type = pml_axis*2+pml_side
+        aux_bc_pml(temp_aux_bc,pml_type,xi,xf,yi,yf,nx,ny)
+    elif aux_bc_upper[0] == 'custom':
+        aux_bc_custom(temp_aux_bc)
+    else:
+        pass
+
+    if aux_bc_upper[1] == 'pml':
+        pml_axis = 1
+        pml_side = 1
+        pml_type = pml_axis*2+pml_side
+        aux_bc_pml(temp_aux_bc,pml_type,xi,xf,yi,yf,nx,ny)
+    elif aux_bc_upper[1] == 'custom':
+        aux_bc_custom(temp_aux_bc)
+    else:
+        pass
+
+    return temp_aux_bc
 
 def bc_scattering(Q1,Q2,Q3,da,t,axis,side):
     """
@@ -334,8 +417,8 @@ def bc_scattering(Q1,Q2,Q3,da,t,axis,side):
         pulseshape = np.exp(-(ex_vx*(t-ex_offset[3]))**2/ex_sigma[3]**2 - (y - ex_offset[2] - ex_vy*(t-ex_offset[3]))**2/ex_sigma[2]**2)
         harmonic = np.sin(omega*t)
     elif ex_type=='plane_pulse':
-        pulseshape = np.exp(-(ex_vx*(t-ex_offset[3]))**2/ex_sigma[3]**2)
-        harmonic = np.sin(omega*t)
+        pulseshape = np.exp(-((t-200.0*dt))**2/(50.0*dt)**2)
+        harmonic = 1.0#np.sin(omega*t)
     elif ex_type=='simple_pulse2D':
         pulseshape = np.exp(-(ex_vx*(t-ex_offset[3]))**2/ex_sigma[3]**2 - (y - ex_offset[2] - ex_vy*(t-ex_offset[3]))**2/ex_sigma[2]**2)
         harmonic = 1.0
@@ -374,10 +457,19 @@ def aux_bc_pml(pml,pml_type,xi,xf,yi,yf,nx,ny):
     Set  PML on the auxiliary boundary conditions.
     """
     from build_pml import build_pml
+    # parameters needed for pml calculation
+    norder  = 3
+    Ro      = 1.0e-6
     #    ddx,ddy,dt,co = 1,1,1,1
     build_pml(pml,pml_type,ddx,ddy,dt,norder,Ro,co,xi+1,xf,yi+1,yf,nx,ny)
 
-def aux_bc():
+def bc_custom():
+    """
+    user controlled boundary auxiliary conditions
+    """
+    pass
+
+def aux_bc_custom(temp_aux_bc):
     """
     user controlled boundary auxiliary conditions
     """
@@ -413,7 +505,6 @@ da = PETSc.DA().create([nx,ny], dof=1,
                        stencil_type=stype,
                        stencil_width=swidth)
 
-
 ( xi, xf), ( yi, yf) = da.getRanges()
 (gxi,gxf), (gyi,gyf) = da.getGhostRanges()
 
@@ -433,23 +524,77 @@ s2  = np.zeros([xf-xi,yf-yi], order='F')
 s3  = np.zeros([xf-xi,yf-yi], order='F')
 s4  = np.zeros([xf-xi,yf-yi], order='F')
 
-#aux = etar(num_aux,gxi,gxf,gyi,gyf,ddx,ddy)
-#aux = np.ones ([num_aux,xf-xi,yf-yi], order='F')
 aux = etar(da,ddx,ddy)
+aux_bc = auxbc(da)
 
-pml = np.ones ([num_pml,xf-xi,yf-yi], order='F')
-pml_axis = 0
-pml_side = 1
-pml_type = pml_axis*2+pml_side
-aux_bc_pml(pml,pml_type,xi,xf,yi,yf,nx,ny)
-from matplotlib import pylab
-#for i in range(8):
-pylab.figure()
-pylab.contourf(aux[1,:,:].copy())
-pylab.colorbar()
-pylab.show()
+if debug_eta:
+    from matplotlib import pylab
+    pylab.figure()
+    pylab.contourf(eta_out[1,:,:].copy())
+    pylab.colorbar()
+    pylab.show()
 
-draw = PETSc.Viewer.DRAW()
+if debug_auxbc:
+    from matplotlib import pylab
+    pylab.figure()
+    pylab.contourf(aux_bc[0,:,:].copy())
+    pylab.colorbar()
+    pylab.show()
+
+if liveview:
+    draw = PETSc.Viewer.DRAW()
+
+try:
+    os.makedirs(save_outdir)
+except: OSError("directory already exist")
+
+# create a temporary dictionary with the parameters simulation
+if mat_shape=='gaussian1dx':
+    params  = { 'outdir':save_outdir,
+                'nx': nx,
+                'ny': ny,
+                'dt': dt,
+                'dx': ddx,
+                'dy': ddy,
+                'num_steps': max_steps,
+                't_final': t_final,
+                'dimensions': [x_lower,x_upper,y_lower,y_upper],
+                'shape': mat_shape,
+                'ex_type': ex_type,
+                'lambda': ex_lambda,
+                'eta': eta,
+                'aux': aux,
+                'eta_velocity':eta_velocity,
+                'bc_lower': bc_lower,
+                'bc_upper': bc_upper,
+                'aux_bc_lower': aux_bc_lower,
+                'aux_bc_upper': aux_bc_upper
+              }
+else:
+    params  = { 'outdir':save_outdir,
+                'nx': nx,
+                'ny': ny,
+                'dt': dt,
+                'dx': ddx,
+                'dy': ddy,
+                'num_steps': max_steps,
+                't_final': t_final,
+                'dimensions':[x_lower,x_upper,y_lower,y_upper],
+                'shape': mat_shape,
+                'ex_type': ex_type,
+                'lambda': ex_lambda,
+                'eta' : eta,
+                'aux': aux,
+                'bc_lower': bc_lower,
+                'bc_upper': bc_upper,
+                'aux_bc_lower': aux_bc_lower,
+                'aux_bc_upper': aux_bc_upper
+              }
+
+pkl_out = open(save_outdir+save_name+'.pkl', 'wb')
+pkl.dump(params, pkl_out)
+pkl_out.close()
+
 for n in range(0,int(max_steps)):
     if n == 0:
         t = n*dt
@@ -460,22 +605,27 @@ for n in range(0,int(max_steps)):
     bc_scattering(Q1,Q2,Q3,da,t,1,0)
     da.globalToLocal(Q1, Q1loc)
     da.globalToLocal(Q2, Q2loc)
-    fdtd_2d(aux,pml,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,0)
+    fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,0)
     da.localToGlobal(Q3loc, Q3)
 
     da.globalToLocal(Q3, Q3loc)
-    fdtd_2d(aux,pml,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,0)
+    fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,0)
     da.localToGlobal(Q1loc, Q1)
     da.localToGlobal(Q2loc, Q2)
 
-    #bc(Q1,Q2,Q3)
-    Q3.view(draw)
-    #write(Q1,Q3,Q3,"./_test/step%d.dat" % t)
-    prb = gauges(da)
-    prb.probe('Q1', Q1)
-    prb.probe('Q2', Q2)
+    if liveview:
+        Q3.view(draw)
+    if np.mod(n,n_write)==0:
+        if write_q:
+            write(Q1,Q3,Q3,save_outdir+'step%d.dat' % n)
+        print n
+    if gauge:
+        prb = gauges(da)
+        prb.probe('Q2', Q1)
+        prb.probe('Q3', Q2)
 
-#prb.save("probe.dat")
+if write_gauge and gauge:
+    prb.save(save_outdir+"probe.dat")
 #from pprint import pprint
 #pprint(prb.cache)
 #print prb.cache['Q2'][0,15]
