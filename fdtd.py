@@ -9,11 +9,11 @@ import numpy as np
 
 # -------- GLOBAL SCALAR DEFINITIONS -----------------------------
 
-n_frames    = 100
-save_outdir = './_test/'
-save_name   = 'test'
-liveview    = True
-write_q     = False
+n_frames    = 150
+save_outdir = './_moving_gaussian/'
+save_name   = 'movinggauss'
+liveview    = False
+write_q     = True
 write_aux   = False
 gauge       = False
 write_gauge = False
@@ -21,11 +21,11 @@ mode        = 'TM'
 debug_eta   = False
 debug_auxbc = False
 vaccum_ones = False
-
+before_step = True
 # ======== all definitions are in m,s,g unit system.
 # ....... dimensions .............................................
 x_lower = 0.0
-x_upper = 10.0e-6                    # lenght [m]
+x_upper = 400.0e-6                    # lenght [m]
 y_lower = 0.0
 y_upper = 10.0e-6                   # notice that for multilayer this is value will be over-written
 # ........ material properties ...................................
@@ -43,7 +43,7 @@ co      = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
 zo      = np.sqrt(mo/eo)
 
 # material
-mat_shape       = 'homogeneous'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_shape       = 'gaussian1dx'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 mat_nonliner    = False
 
 # initialize material properties and fill with default values (this should become class material)
@@ -58,19 +58,19 @@ if mat_shape == 'interface' or 'interfacex' or 'interfacey':
 if mat_shape == 'gaussian1dx':
     eta             = np.ones([3])
     delta_eta       = np.zeros([3])
-    eta_velocity    = np.zeros([2,3])
+    eta_velocity    = np.ones([2,3])*0.61*co
     eta_offset      = np.zeros([2,3])
     eta_sigma       = np.zeros([2,3])
     delta_eta       = np.zeros([3])
     # once the material class is created the settings below should be created as defaults
     eta             = eta*1.5
     delta_eta       = 0.1*eta
-    eta_offset[0,:].fill((x_upper-x_lower)/2.0)
-    eta_offset[1,:].fill((y_upper-y_lower)/2.0)
-    eta_sigma[0,:].fill((x_upper-x_lower)/25.0)
-    eta_sigma[1,:].fill((y_upper-y_lower)/25.0)
-    eta_sigma.fill(10e-6)
-    eta_sigma.fill(10e-6)
+    eta_offset[0,:].fill(8.0e-6)#(x_upper-x_lower)/2.0)
+    eta_offset[1,:].fill(8.0e-6)#(y_upper-y_lower)/2.0)
+    eta_sigma[0,:].fill(5.0e-6)#(x_upper-x_lower)/25.0)
+    eta_sigma[1,:].fill(5.0e-6)#(y_upper-y_lower)/25.0)
+    eta_sigma.fill(5.0e-6)
+    eta_sigma.fill(5.0e-6)
 if mat_shape == 'multilayer':
     num_materials   = 2
     num_layers      = 10
@@ -83,13 +83,11 @@ if mat_shape == 'multilayer':
     layers[1,4]     = 50.0e-9
 if mat_shape =='homogeneous':
     eta             = np.ones([3])*1.5
-    print 'this is eta',eta
 
 if mat_nonliner:
     chi2 = chi3 = np.zeros( [3], order='F')
 
 # ........ excitation - initial conditoons .......................
-
 # pre-allocate arrays
 ex_sigma        = np.ones([3])    # x,y,t
 ex_offset       = np.zeros([3])
@@ -98,12 +96,10 @@ ex_kvector      = np.zeros([2])
 
 # fill arrays and set respective values
 ex_type         = 'plane'
-ex_lambda       = 1e-6
+ex_lambda       = 1.0e-6
 ex_sigma[0:1]   = 1.0*ex_lambda
 ex_sigma[2]     = (y_upper-y_lower)/2.0
 ex_offset[2]    = (y_upper-y_lower)/2.0
-
-
 
 # ........ Boundary settings settings .................
 bc_lower = ['scattering', 'scattering'] # left and bottom boundary contidions
@@ -135,7 +131,7 @@ elif mat_shape == 'homogeneous':
 
 
 # Grid - mesh settings
-nx = np.floor(20*(x_upper-x_lower)/ex_lambda)
+nx = np.floor(50*(x_upper-x_lower)/ex_lambda)
 
 if mat_shape=='multilayer':
     y_upper = num_layers*np.sum(layers[:,4])+layers[0,4]
@@ -153,7 +149,11 @@ dt = ddt
 t_final = (x_upper-x_lower)/v.min()
 max_steps = np.floor(t_final/ddt)+1
 n_write = np.floor(max_steps/n_frames)
-
+print v
+print v.min()
+print x_upper-x_lower
+print ddx
+print ddy
 print nx,ny, t_final,max_steps,n_write
 dxdt = dt/ddx
 dydt = dt/ddy
@@ -184,7 +184,6 @@ def etar(da,ddx,ddy,t=0):
     ..interfacey:   ibid in y-direction
     ..multilayer:   2D multilayers in x or y direction.
 
-
     y,x are the point coordinates of the grid.
     t is the time coordinate
 
@@ -214,9 +213,9 @@ def etar(da,ddx,ddy,t=0):
         u_y_eta2 = y - eta_velocity[1,1]*t - eta_offset[1,1]
         u_y_eta3 = y - eta_velocity[1,2]*t - eta_offset[1,2]
 
-        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2 + (u_y_eta1/eta_sigma[1,0])**2
-        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2 + (u_y_eta2/eta_sigma[1,1])**2
-        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2 + (u_y_eta3/eta_sigma[1,2])**2
+        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2 #+ (u_y_eta1/eta_sigma[1,0])**2
+        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2 #+ (u_y_eta2/eta_sigma[1,1])**2
+        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2 #+ (u_y_eta3/eta_sigma[1,2])**2
 
         eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1) + eta[0]
         eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2) + eta[1]
@@ -530,14 +529,14 @@ aux_bc = auxbc(da)
 if debug_eta:
     from matplotlib import pylab
     pylab.figure()
-    pylab.contourf(eta_out[1,:,:].copy())
+    pylab.pcolor(aux[1,:,:].copy())
     pylab.colorbar()
     pylab.show()
 
 if debug_auxbc:
     from matplotlib import pylab
     pylab.figure()
-    pylab.contourf(aux_bc[0,:,:].copy())
+    pylab.pcolor(aux_bc[0,:,:].copy())
     pylab.colorbar()
     pylab.show()
 
@@ -563,7 +562,6 @@ if mat_shape=='gaussian1dx':
                 'ex_type': ex_type,
                 'lambda': ex_lambda,
                 'eta': eta,
-                'aux': aux,
                 'eta_velocity':eta_velocity,
                 'bc_lower': bc_lower,
                 'bc_upper': bc_upper,
@@ -584,7 +582,6 @@ else:
                 'ex_type': ex_type,
                 'lambda': ex_lambda,
                 'eta' : eta,
-                'aux': aux,
                 'bc_lower': bc_lower,
                 'bc_upper': bc_upper,
                 'aux_bc_lower': aux_bc_lower,
@@ -601,6 +598,10 @@ for n in range(0,int(max_steps)):
         qinit(Q1,Q2,Q3,da)
         qbc(Q1,Q2,Q3,da,t)
     t = n*dt
+
+    if before_step:
+        aux = etar(da,ddx,ddy,t)
+
     bc_scattering(Q1,Q2,Q3,da,t,0,0)
     bc_scattering(Q1,Q2,Q3,da,t,1,0)
     da.globalToLocal(Q1, Q1loc)
@@ -626,8 +627,5 @@ for n in range(0,int(max_steps)):
 
 if write_gauge and gauge:
     prb.save(save_outdir+"probe.dat")
-#from pprint import pprint
-#pprint(prb.cache)
-#print prb.cache['Q2'][0,15]
 
 sys.exit()

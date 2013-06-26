@@ -2,6 +2,7 @@ import sys, os
 from glob import glob
 import numpy as np
 from myio import Reader
+import pickle
 
 def read(filename):
     reader = Reader()
@@ -78,10 +79,20 @@ def tovtk(q1,q2,q3,filename):
 if __name__ == "__main__":
     import sys
     path = sys.argv[1]
-    nx = int(sys.argv[2])
-    ny = int(sys.argv[3])
-    print nx,ny    
-    # nx, ny = 1000, 221
+    # nx = int(sys.argv[2])
+    # ny = int(sys.argv[3])
+    # print nx,ny    
+    # # nx, ny = 1000, 221
+
+
+    # get the pickle file and cell number
+
+    pkl_file_name = glob(path+'*.pkl')
+    pkl_file = open(pkl_file_name[0],'rb')
+    pkl = pickle.load(pkl_file)
+
+    nx = pkl.get('nx')
+    ny = pkl.get('ny')
 
     coordinates = [np.linspace(0,1,nx),
                    np.linspace(0,1,ny),
@@ -89,7 +100,8 @@ if __name__ == "__main__":
                    ]
     dimensions = (nx, ny, 1) 
 
-    for filename in glob(path+'/step*.dat'):
+
+    for filename in glob(path+'step*.dat'):
         q1,q2,q3 = read(filename)
         vtkname = filename.replace('.dat', '.vtk')
         tovtk(q1,q2,q3,vtkname)
