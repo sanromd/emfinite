@@ -87,6 +87,10 @@ if mat_shape =='homogeneous':
 if mat_nonliner:
     chi2 = chi3 = np.zeros( [3], order='F')
 
+if mat_dispersion:
+    num_poles = 2
+
+
 # ........ excitation - initial conditoons .......................
 # pre-allocate arrays
 ex_sigma        = np.ones([3])    # x,y,t
@@ -496,7 +500,11 @@ def gauges(da):
 
 # create DA and allocate global and local variables
 from petsc4py import PETSc
-from fdtd_da_pml import fdtd_2d
+if mat_dispersion:
+    from fdtd_da_pml import fdtdDispersion2D as fdtd_2d
+    from fdtd_da_pml import CalcDispersion2D
+else:
+    from fdtd_da_pml import fdtd2D as fdtd_2d
 
 stype  = PETSc.DA.StencilType.STAR
 swidth = 1
@@ -522,6 +530,16 @@ s1  = np.zeros([xf-xi,yf-yi], order='F')
 s2  = np.zeros([xf-xi,yf-yi], order='F')
 s3  = np.zeros([xf-xi,yf-yi], order='F')
 s4  = np.zeros([xf-xi,yf-yi], order='F')
+
+if mat_dispersion:
+    p1    = np.zeros([num_poles,3,xf-xi,yf-yi], order='F')
+    p2    = np.zeros([num_poles,3,xf-xi,yf-yi], order='F')
+    p3    = np.zeros([num_poles,3,xf-xi,yf-yi], order='F')
+    psum  = np.zeros([3,xf-xi,yf-yi], order='F')
+ 
+    c1    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
+    c2    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
+    c3    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
 
 aux = etar(da,ddx,ddy)
 aux_bc = auxbc(da)
@@ -604,15 +622,31 @@ for n in range(0,int(max_steps)):
 
     bc_scattering(Q1,Q2,Q3,da,t,0,0)
     bc_scattering(Q1,Q2,Q3,da,t,1,0)
-    da.globalToLocal(Q1, Q1loc)
-    da.globalToLocal(Q2, Q2loc)
-    fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,0)
-    da.localToGlobal(Q3loc, Q3)
+    if mat_dispersion:
+        da.globalToLocal(Q1, Q1loc)
+        da.globalToLocal(Q2, Q2loc)
+        fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
+        da.localToGlobal(Q3loc, Q3)
 
-    da.globalToLocal(Q3, Q3loc)
-    fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,0)
-    da.localToGlobal(Q1loc, Q1)
-    da.localToGlobal(Q2loc, Q2)
+        da.globalToLocal(Q3, Q3loc)
+        fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
+        da.localToGlobal(Q1loc, Q1)
+        da.localToGlobal(Q2loc, Q2)
+
+        CalcDispersion2D(q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
+        CalcDispersion2D(q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
+
+    else:
+        da.globalToLocal(Q1, Q1loc)
+        da.globalToLocal(Q2, Q2loc)
+        fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
+        da.localToGlobal(Q3loc, Q3)
+
+        da.globalToLocal(Q3, Q3loc)
+        fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
+        da.localToGlobal(Q1loc, Q1)
+        da.localToGlobal(Q2loc, Q2)
+
 
     if liveview:
         Q3.view(draw)
