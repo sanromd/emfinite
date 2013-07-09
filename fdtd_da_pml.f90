@@ -165,7 +165,7 @@ subroutine fdtdDispersion2D(aux,pml,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,psum,na,np,xi
           do j = js,je
             do i = is,ie
               s2(i,j) = s2(i,j) + dxdt*(q3(i-1,j) - q3(i,j))
-              q2(i,j) = (s2(i,j)--psum(2,i,j))/aux(2,i,j)
+              q2(i,j) = (s2(i,j)-psum(2,i,j))/aux(2,i,j)
             enddo
           enddo
         end select
@@ -176,14 +176,13 @@ end subroutine fdtdDispersion2D
 subroutine CalcDispersion2D(np,q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi,xf,yi,yf,gxi,gxf,gyi,gyf,pml_decomp,q_type)
 
   implicit none
-  integer, intent(in) :: q_type, pml_decomp
+  integer, intent(in) :: np, q_type, pml_decomp
   integer, intent(in) :: xi, xf, yi, yf, gxi, gxf, gyi, gyf
   double precision, dimension(       gxi:gxf,gyi:gyf), intent(in)    :: q1,q2,q3
   double precision, dimension(np, 3, gxi:gxf,gyi:gyf), intent(inout) :: p1,p2,p3
   double precision, dimension(3,     gxi:gxf,gyi:gyf), intent(inout) :: psum
   double precision, dimension(np,    gxi:gxf,gyi:gyf), intent(in)    :: c1,c2,c3
-  double precision, intent(in) :: dxdt,dydt
-  integer :: i,j, is, js, ie, je
+  integer :: i,j, is, js, ie, je, k
 
   select case(q_type) 
     case(0) !calculate q3
@@ -197,7 +196,7 @@ subroutine CalcDispersion2D(np,q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi,xf,yi,yf,gxi,g
           do j = js,je
             do i = is,ie
               psum(3,i,j) = sum(p3(:,1,i,j))
-              do k = 1:np
+              do k = 1,np
                 p3(k,1,i,j) = c1(k,i,j)*p3(k,2,i,j) + c2(k,i,j)*p3(k,3,i,j) + c3(k,i,j)*q3(i,j)
                 p3(k,3,i,j) = p3(k,2,i,j)
                 p3(k,2,i,j) = p3(k,1,i,j)
@@ -208,7 +207,7 @@ subroutine CalcDispersion2D(np,q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi,xf,yi,yf,gxi,g
           do j = js,je
             do i = is,ie
               psum(3,i,j) = sum(p3(:,1,i,j))
-              do k = 1:np
+              do k = 1,np
                 p3(k,1,i,j) = c1(k,i,j)*p3(k,2,i,j) + c2(k,i,j)*p3(k,3,i,j) + c3(k,i,j)*q3(i,j)
                 p3(k,3,i,j) = p3(k,2,i,j)
                 p3(k,2,i,j) = p3(k,1,i,j)
@@ -228,8 +227,8 @@ subroutine CalcDispersion2D(np,q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi,xf,yi,yf,gxi,g
           do j = js,je
             do i = is,ie
               psum(3,i,j) = sum(p1(:,1,i,j))
-              do k = 1:np
-                p1(k,1,i,j) = c1(k,i,j)*p1(k,2,i,j) + c2(k,i,j)*p1(k,3,i,j) + c3(k,i,j)*q3(i,j)
+              do k = 1,np
+                p1(k,1,i,j) = c1(k,i,j)*p1(k,2,i,j) + c2(k,i,j)*p1(k,3,i,j) + c3(k,i,j)*q1(i,j)
                 p1(k,3,i,j) = p1(k,2,i,j)
                 p1(k,2,i,j) = p1(k,1,i,j)
               enddo
@@ -239,8 +238,8 @@ subroutine CalcDispersion2D(np,q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi,xf,yi,yf,gxi,g
           do j = js,je
             do i = is,ie
               psum(1,i,j) = sum(p1(:,1,i,j))
-              do k = 1:np
-                p1(k,1,i,j) = c1(k,i,j)*p1(k,2,i,j) + c2(k,i,j)*p1(k,3,i,j) + c3(k,i,j)*q3(i,j)
+              do k = 1,np
+                p1(k,1,i,j) = c1(k,i,j)*p1(k,2,i,j) + c2(k,i,j)*p1(k,3,i,j) + c3(k,i,j)*q1(i,j)
                 p1(k,3,i,j) = p1(k,2,i,j)
                 p1(k,2,i,j) = p1(k,1,i,j)
               enddo
@@ -259,8 +258,8 @@ subroutine CalcDispersion2D(np,q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi,xf,yi,yf,gxi,g
           do j = js,je
              do i = is,ie
               psum(2,i,j) = sum(p2(:,1,i,j))
-              do k = 1:np
-                p2(k,1,i,j) = c1(k,i,j)*p2(k,2,i,j) + c2(k,i,j)*p2(k,3,i,j) + c3(k,i,j)*q3(i,j)
+              do k = 1,np
+                p2(k,1,i,j) = c1(k,i,j)*p2(k,2,i,j) + c2(k,i,j)*p2(k,3,i,j) + c3(k,i,j)*q2(i,j)
                 p2(k,3,i,j) = p2(k,2,i,j)
                 p2(k,2,i,j) = p2(k,1,i,j)
               enddo
@@ -270,8 +269,8 @@ subroutine CalcDispersion2D(np,q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi,xf,yi,yf,gxi,g
           do j = js,je
             do i = is,ie
               psum(3,i,j) = sum(p2(:,1,i,j))
-              do k = 1:np
-                p2(k,1,i,j) = c1(k,i,j)*p2(k,2,i,j) + c2(k,i,j)*p2(k,3,i,j) + c3(k,i,j)*q3(i,j)
+              do k = 1,np
+                p2(k,1,i,j) = c1(k,i,j)*p2(k,2,i,j) + c2(k,i,j)*p2(k,3,i,j) + c3(k,i,j)*q2(i,j)
                 p2(k,3,i,j) = p2(k,2,i,j)
                 p2(k,2,i,j) = p2(k,1,i,j)
               enddo
