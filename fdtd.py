@@ -18,14 +18,14 @@ write_aux   = False
 gauge       = False
 write_gauge = False
 mode        = 'TM'
-debug_eta   = False
+debug_eta   = True
 debug_auxbc = False
 vaccum_ones = False
 before_step = True
 # ======== all definitions are in m,s,g unit system.
 # ....... dimensions .............................................
 x_lower = 0.0
-x_upper = 400.0e-6                    # lenght [m]
+x_upper = 100.0e-6                    # lenght [m]
 y_lower = 0.0
 y_upper = 10.0e-6                   # notice that for multilayer this is value will be over-written
 # ........ material properties ...................................
@@ -43,7 +43,7 @@ co      = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
 zo      = np.sqrt(mo/eo)
 
 # material
-mat_shape       = 'gaussian1dx'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_shape       = 'gauss_heart'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 mat_nonliner    = False
 
 # initialize material properties and fill with default values (this should become class material)
@@ -224,6 +224,25 @@ def etar(da,ddx,ddy,t=0):
         eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1) + eta[0]
         eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2) + eta[1]
         eta_out[2,:,:] = delta_eta[2]*np.exp(-u_eta3) + eta[2]
+    if mat_shape=='gauss_heart':
+        import scipy.special as sps
+        dcx = (x_upper-x_lower)/2.0
+        dcy = (y_upper-y_lower)/2.0
+        u_x_eta1 = x - eta_velocity[0,0]*t - eta_offset[0,0]
+        u_x_eta2 = x - eta_velocity[0,1]*t - eta_offset[0,1]
+        u_x_eta3 = x - eta_velocity[0,2]*t - eta_offset[0,2]
+        u_y_eta1 = y - eta_velocity[1,0]*t - eta_offset[1,0]
+        u_y_eta2 = y - eta_velocity[1,1]*t - eta_offset[1,1]
+        u_y_eta3 = y - eta_velocity[1,2]*t - eta_offset[1,2]
+
+        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2 #+ (u_y_eta1/eta_sigma[1,0])**2
+        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2 #+ (u_y_eta2/eta_sigma[1,1])**2
+        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2 #+ (u_y_eta3/eta_sigma[1,2])**2
+
+        eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1)*(((y-dcy)**2+((-x+(dcx-eta_sigma[0,0]))-sps.cbrt((y-dcy)**2))**2)<=dcx/2) + eta[0]
+        eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2)*(((y-dcy)**2+((-x+(dcx-eta_sigma[0,0]))-sps.cbrt((y-dcy)**2))**2)<=dcx/2) + eta[1]
+        eta_out[2,:,:] = delta_eta[2]*np.exp(-u_eta3)*(((y-dcy)**2+((-x+(dcx-eta_sigma[0,0]))-sps.cbrt((y-dcy)**2))**2)<=dcx/2) + eta[2]
+
     elif mat_shape=='homogeneous':
         eta_out[0,:,:] = eta[0]
         eta_out[1,:,:] = eta[1]
