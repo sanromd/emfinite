@@ -7,16 +7,19 @@ import pickle
 def read(filename):
     reader = Reader()
     Q1, Q2, Q3 = reader.read(filename)
-    return Q1, Q2, Q3
     q1 = Q1.reshape([nx,ny], order='F')
     q2 = Q2.reshape([nx,ny], order='F')
     q3 = Q3.reshape([nx,ny], order='F')
+    I = q1**2+q3**2
+    S = q2*q3
+    return q1, q2, q3, I, S
 
-
-def tovtk(q1,q2,q3,filename):
+def tovtk(q1,q2,q3,I,S,filename):
     scalars = [("Q1", q1),
                ("Q2", q2),
-               ("Q3", q3)]
+               ("Q3", q3),
+               ("I",   I),
+               ("S",   S)]
     vectors = []
     title = 'VTK Data'
 
@@ -102,6 +105,6 @@ if __name__ == "__main__":
 
 
     for filename in glob(path+'step*.dat'):
-        q1,q2,q3 = read(filename)
+        q1,q2,q3,I,S = read(filename)
         vtkname = filename.replace('.dat', '.vtk')
-        tovtk(q1,q2,q3,vtkname)
+        tovtk(q1,q2,q3,I,S,vtkname)

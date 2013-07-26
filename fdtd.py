@@ -9,9 +9,9 @@ import numpy as np
 
 # -------- GLOBAL SCALAR DEFINITIONS -----------------------------
 
-n_frames    = 150
-save_outdir = './_moving_gaussian/'
-save_name   = 'movinggauss'
+n_frames    = 100
+save_outdir = './_test_interfacey/'
+save_name   = 'interfacey'
 liveview    = False
 write_q     = True
 write_aux   = False
@@ -21,13 +21,15 @@ mode        = 'TM'
 debug_eta   = True
 debug_auxbc = False
 vaccum_ones = False
-before_step = True
+before_step = False
 # ======== all definitions are in m,s,g unit system.
 # ....... dimensions .............................................
 x_lower = 0.0
-x_upper = 100.0e-6                    # lenght [m]
+x_upper = 50.0e-6                    # lenght [m]
 y_lower = 0.0
-y_upper = 10.0e-6                   # notice that for multilayer this is value will be over-written
+y_upper = 50.0e-6                   # notice that for multilayer this is value will be over-written
+mid_x = (x_upper-x_lower)/2.0
+mid_y = (y_upper-y_lower)/2.0
 # ........ material properties ...................................
 
 # vacuum
@@ -43,35 +45,34 @@ co      = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
 zo      = np.sqrt(mo/eo)
 
 # material
-mat_shape       = 'gauss_heart'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_shape       = 'interfacey'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 mat_nonliner    = False
-
+mat_dispersion  = False
 # initialize material properties and fill with default values (this should become class material)
 if mat_shape == 'interface' or 'interfacex' or 'interfacey':
     eta             = np.ones([2,3])
     eta[0,:]        = 1.0
     eta[1,:]        = 2.0
     if mat_shape == 'interfacex':
-        mat_change        = (x_upper-x_lower)/2.0
+        mat_change  = (x_upper-x_lower)/2.0
     else:
-        mat_change        = (y_upper-y_lower)/2.0
-if mat_shape == 'gaussian1dx':
+        mat_change  = (y_upper-y_lower)/2.0
+elif mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
     eta             = np.ones([3])
     delta_eta       = np.zeros([3])
-    eta_velocity    = np.ones([2,3])*0.61*co
+    eta_velocity    = np.zeros([2,3])#*0.61*co
     eta_offset      = np.zeros([2,3])
     eta_sigma       = np.zeros([2,3])
-    delta_eta       = np.zeros([3])
     # once the material class is created the settings below should be created as defaults
     eta             = eta*1.5
     delta_eta       = 0.1*eta
-    eta_offset[0,:].fill(8.0e-6)#(x_upper-x_lower)/2.0)
-    eta_offset[1,:].fill(8.0e-6)#(y_upper-y_lower)/2.0)
+    eta_offset[0,:].fill(mid_x)
+    eta_offset[1,:].fill(mid_y)
     eta_sigma[0,:].fill(5.0e-6)#(x_upper-x_lower)/25.0)
     eta_sigma[1,:].fill(5.0e-6)#(y_upper-y_lower)/25.0)
     eta_sigma.fill(5.0e-6)
     eta_sigma.fill(5.0e-6)
-if mat_shape == 'multilayer':
+elif mat_shape == 'multilayer':
     num_materials   = 2
     num_layers      = 10
     layers          = np.zeros([num_materials,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
@@ -81,12 +82,11 @@ if mat_shape == 'multilayer':
     layers[1,3]     = layers[0,3] - 1
     layers[0,4]     = 15.0e-9
     layers[1,4]     = 50.0e-9
-if mat_shape =='homogeneous':
+elif mat_shape =='homogeneous':
     eta             = np.ones([3])*1.5
 
 if mat_nonliner:
     chi2 = chi3 = np.zeros( [3], order='F')
-
 if mat_dispersion:
     num_poles = 2
 
@@ -149,6 +149,8 @@ ddx = (x_upper-x_lower)/nx
 ddy = (y_upper-y_lower)/ny
 ddt = dt=0.50/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
 
+
+
 dt = ddt
 t_final = (x_upper-x_lower)/v.min()
 max_steps = np.floor(t_final/ddt)+1
@@ -209,25 +211,31 @@ def etar(da,ddx,ddy,t=0):
     eta_out = np.zeros( [3,len(X),len(Y)], order='F')
     eta_temp = eta_out.copy()
 
-    if mat_shape=='gaussian1dx':
+    if mat_shape=='gaussian_x':
         u_x_eta1 = x - eta_velocity[0,0]*t - eta_offset[0,0]
         u_x_eta2 = x - eta_velocity[0,1]*t - eta_offset[0,1]
         u_x_eta3 = x - eta_velocity[0,2]*t - eta_offset[0,2]
-        u_y_eta1 = y - eta_velocity[1,0]*t - eta_offset[1,0]
-        u_y_eta2 = y - eta_velocity[1,1]*t - eta_offset[1,1]
-        u_y_eta3 = y - eta_velocity[1,2]*t - eta_offset[1,2]
 
-        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2 #+ (u_y_eta1/eta_sigma[1,0])**2
-        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2 #+ (u_y_eta2/eta_sigma[1,1])**2
-        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2 #+ (u_y_eta3/eta_sigma[1,2])**2
+        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2
+        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2
+        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2
 
         eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1) + eta[0]
         eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2) + eta[1]
         eta_out[2,:,:] = delta_eta[2]*np.exp(-u_eta3) + eta[2]
-    if mat_shape=='gauss_heart':
-        import scipy.special as sps
-        dcx = (x_upper-x_lower)/2.0
-        dcy = (y_upper-y_lower)/2.0
+    elif mat_shape=='gaussian_y':
+        u_y_eta1 = y - eta_velocity[1,0]*t - eta_offset[1,0]
+        u_y_eta2 = y - eta_velocity[1,1]*t - eta_offset[1,1]
+        u_y_eta3 = y - eta_velocity[1,2]*t - eta_offset[1,2]
+
+        u_eta1 = (u_y_eta1/eta_sigma[1,0])**2
+        u_eta2 = (u_y_eta2/eta_sigma[1,1])**2
+        u_eta3 = (u_y_eta3/eta_sigma[1,2])**2
+
+        eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1) + eta[0]
+        eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2) + eta[1]
+        eta_out[2,:,:] = delta_eta[2]*np.exp(-u_eta3) + eta[2]
+    elif mat_shape=='gaussian':
         u_x_eta1 = x - eta_velocity[0,0]*t - eta_offset[0,0]
         u_x_eta2 = x - eta_velocity[0,1]*t - eta_offset[0,1]
         u_x_eta3 = x - eta_velocity[0,2]*t - eta_offset[0,2]
@@ -235,19 +243,19 @@ def etar(da,ddx,ddy,t=0):
         u_y_eta2 = y - eta_velocity[1,1]*t - eta_offset[1,1]
         u_y_eta3 = y - eta_velocity[1,2]*t - eta_offset[1,2]
 
-        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2 #+ (u_y_eta1/eta_sigma[1,0])**2
-        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2 #+ (u_y_eta2/eta_sigma[1,1])**2
-        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2 #+ (u_y_eta3/eta_sigma[1,2])**2
+        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2 + (u_y_eta1/eta_sigma[1,0])**2
+        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2 + (u_y_eta2/eta_sigma[1,1])**2
+        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2 + (u_y_eta3/eta_sigma[1,2])**2
 
-        eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1)*(((y-dcy)**2+((-x+(dcx-eta_sigma[0,0]))-sps.cbrt((y-dcy)**2))**2)<=dcx/2) + eta[0]
-        eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2)*(((y-dcy)**2+((-x+(dcx-eta_sigma[0,0]))-sps.cbrt((y-dcy)**2))**2)<=dcx/2) + eta[1]
-        eta_out[2,:,:] = delta_eta[2]*np.exp(-u_eta3)*(((y-dcy)**2+((-x+(dcx-eta_sigma[0,0]))-sps.cbrt((y-dcy)**2))**2)<=dcx/2) + eta[2]
-
+        eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1) + eta[0]
+        eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2) + eta[1]
+        eta_out[2,:,:] = delta_eta[2]*np.exp(-u_eta3) + eta[2]
     elif mat_shape=='homogeneous':
         eta_out[0,:,:] = eta[0]
         eta_out[1,:,:] = eta[1]
         eta_out[2,:,:] = eta[2]
-    elif mat_shape=='interfacex' or 'interface':
+    elif mat_shape=='interfacex':
+        print eta
         eta_out[0,:,:] = eta[0,0]*(x<mat_change) + eta[1,0]*(x>=mat_change)
         eta_out[1,:,:] = eta[0,1]*(x<mat_change) + eta[1,1]*(x>=mat_change)
         eta_out[2,:,:] = eta[0,2]*(x<mat_change) + eta[1,2]*(x>=mat_change)
@@ -520,10 +528,10 @@ def gauges(da):
 # create DA and allocate global and local variables
 from petsc4py import PETSc
 if mat_dispersion:
-    from fdtd_da_pml import fdtdDispersion2D as fdtd_2d
-    from fdtd_da_pml import CalcDispersion2D
+    from fdtd_da_pml import fdtddispersion2d as fdtd_2d
+    from fdtd_da_pml import calcdispersion2d
 else:
-    from fdtd_da_pml import fdtd2D as fdtd_2d
+    from fdtd_da_pml import fdtd2d as fdtd_2d
 
 stype  = PETSc.DA.StencilType.STAR
 swidth = 1
@@ -563,12 +571,21 @@ if mat_dispersion:
 aux = etar(da,ddx,ddy)
 aux_bc = auxbc(da)
 
+try:
+    os.makedirs(save_outdir)
+except: OSError("directory already exist")
+
 if debug_eta:
-    from matplotlib import pylab
+    print 'debug eta'
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as pylab
     pylab.figure()
-    pylab.pcolor(aux[1,:,:].copy())
+    pylab.imshow(aux[1,:,:].transpose())
     pylab.colorbar()
-    pylab.show()
+    pylab.draw()
+    print 'saving'
+    pylab.savefig(save_outdir+'aux_'+save_name+'.png')
 
 if debug_auxbc:
     from matplotlib import pylab
@@ -580,9 +597,7 @@ if debug_auxbc:
 if liveview:
     draw = PETSc.Viewer.DRAW()
 
-try:
-    os.makedirs(save_outdir)
-except: OSError("directory already exist")
+
 
 # create a temporary dictionary with the parameters simulation
 if mat_shape=='gaussian1dx':
@@ -672,7 +687,7 @@ for n in range(0,int(max_steps)):
     if np.mod(n,n_write)==0:
         if write_q:
             write(Q1,Q3,Q3,save_outdir+'step%d.dat' % n)
-        print n
+        print 100*n/max_steps
     if gauge:
         prb = gauges(da)
         prb.probe('Q2', Q1)
