@@ -10,11 +10,11 @@ import numpy as np
 # -------- GLOBAL SCALAR DEFINITIONS -----------------------------
 
 n_frames    = 100
-save_outdir = './_test_interfacey/'
-save_name   = 'interfacey'
+save_outdir = './_nanorods2/'
+save_name   = 'nanorods2'
 liveview    = False
 write_q     = True
-write_aux   = False
+write_aux   = True
 gauge       = False
 write_gauge = False
 mode        = 'TM'
@@ -28,7 +28,7 @@ x_lower = 0.0
 x_upper = 50.0e-6                    # lenght [m]
 y_lower = 0.0
 y_upper = 50.0e-6                   # notice that for multilayer this is value will be over-written
-mid_x = (x_upper-x_lower)/2.0
+mid_x = (x_upper-x_lower)/2.0 - 10e-6
 mid_y = (y_upper-y_lower)/2.0
 # ........ material properties ...................................
 
@@ -45,7 +45,7 @@ co      = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
 zo      = np.sqrt(mo/eo)
 
 # material
-mat_shape       = 'interfacey'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_shape       = 'custom'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 mat_nonliner    = False
 mat_dispersion  = False
 # initialize material properties and fill with default values (this should become class material)
@@ -57,7 +57,8 @@ if mat_shape == 'interface' or 'interfacex' or 'interfacey':
         mat_change  = (x_upper-x_lower)/2.0
     else:
         mat_change  = (y_upper-y_lower)/2.0
-elif mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
+
+if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
     eta             = np.ones([3])
     delta_eta       = np.zeros([3])
     eta_velocity    = np.zeros([2,3])#*0.61*co
@@ -72,7 +73,8 @@ elif mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
     eta_sigma[1,:].fill(5.0e-6)#(y_upper-y_lower)/25.0)
     eta_sigma.fill(5.0e-6)
     eta_sigma.fill(5.0e-6)
-elif mat_shape == 'multilayer':
+
+if mat_shape =='multilayer':
     num_materials   = 2
     num_layers      = 10
     layers          = np.zeros([num_materials,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
@@ -82,8 +84,20 @@ elif mat_shape == 'multilayer':
     layers[1,3]     = layers[0,3] - 1
     layers[0,4]     = 15.0e-9
     layers[1,4]     = 50.0e-9
-elif mat_shape =='homogeneous':
+
+if mat_shape =='homogeneous':
     eta             = np.ones([3])*1.5
+
+if mat_shape =='custom':
+    num_materials   = 2
+    num_layers      = 50
+    layers          = np.zeros([num_materials,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
+    layers[0,0:3]   = 1.0
+    layers[1,0:3]   = 2.0
+    layers[0,3]     = 10
+    layers[1,3]     = layers[0,3] - 1
+    layers[0,4]     = 10.0e-9
+    layers[1,4]     = 50.0e-9
 
 if mat_nonliner:
     chi2 = chi3 = np.zeros( [3], order='F')
@@ -132,6 +146,9 @@ elif mat_shape == 'interface' or 'interfacex' or 'interfacey':
     v[1] = co/(eta.min())
 elif mat_shape == 'homogeneous':
     v[0] = v[1] = co/(eta.max())
+elif mat_shape == 'custom':
+    v[0] = co/(layers[:,0:3].max())
+    v[1] = co/(layers[:,0:3].min())
 
 
 # Grid - mesh settings
@@ -142,6 +159,11 @@ if mat_shape=='multilayer':
     tlp = np.sum(layers[:,4])
     mlp = np.floor(tlp/1e-9)
     ny = np.floor((y_upper-y_lower)/2.5e-9)
+elif mat_shape=='custom':
+    y_upper = num_layers*np.sum(layers[:,4])+layers[0,4]
+    tlp = np.sum(layers[:,4])
+    mlp = np.floor(tlp/1.0e-9)
+    ny = np.floor((y_upper-y_lower)/1.0e-9)
 else:
     ny = np.floor(20*(y_upper-y_lower)/ex_lambda)
 
@@ -155,12 +177,12 @@ dt = ddt
 t_final = (x_upper-x_lower)/v.min()
 max_steps = np.floor(t_final/ddt)+1
 n_write = np.floor(max_steps/n_frames)
-print v
-print v.min()
-print x_upper-x_lower
-print ddx
-print ddy
-print nx,ny, t_final,max_steps,n_write
+print 'speed velocity is ', v.min()
+print 'total distance in x-direction: ',x_upper-x_lower
+print 'ddx,ddy  ', ddx, ddy
+print 'nx, ny ', nx,ny
+print 't_final ', t_final,
+print 'max_steps ', max_steps
 dxdt = dt/ddx
 dydt = dt/ddy
 
@@ -277,6 +299,26 @@ def etar(da,ddx,ddy,t=0):
                     eta_temp[2,:,:] = eta_out[2,:,:] + layers[m,2]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))
 
                 eta_out = eta_temp.copy()
+    elif mat_shape=='custom':
+        # this material is based on the multilayer but has a modification to it to include the substrate and finite length rods
+        yi = np.arange(0,num_layers+1)*tlp
+        for m in range(0,num_materials):
+            for i in range(0,num_layers+1):
+                if m==0:
+                    eta_temp[0,:,:] = eta_out[0,:,:] + layers[0,0]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
+                    eta_temp[1,:,:] = eta_out[1,:,:] + layers[0,1]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
+                    eta_temp[2,:,:] = eta_out[2,:,:] + layers[0,2]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
+                else:
+                    eta_temp[0,:,:] = eta_out[0,:,:] + layers[m,0]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
+                    eta_temp[1,:,:] = eta_out[1,:,:] + layers[m,1]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
+                    eta_temp[2,:,:] = eta_out[2,:,:] + layers[m,2]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
+
+                eta_out = eta_temp.copy()
+        
+        eta_out = eta_out + 1.4*(x<mid_x)
+        eta_out[eta_out==0.0] = 1.0
+
+
         # eta_out[0,:,:] += layers[0,0]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
         # eta_out[1,:,:] += layers[0,1]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
         # eta_out[2,:,:] += layers[0,2]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4]) 

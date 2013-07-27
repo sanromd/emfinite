@@ -10,9 +10,18 @@ def read(filename):
     q1 = Q1.reshape([nx,ny], order='F')
     q2 = Q2.reshape([nx,ny], order='F')
     q3 = Q3.reshape([nx,ny], order='F')
-    I = q1**2+q3**2
-    S = q2*q3
-    return q1, q2, q3, I, S
+    I = q1**2+q2**2+q3**2
+    s1 = q2*q3
+    s2 = -q1*q3
+    s3 = 0.0*q1
+    S = s1**2 + s2**2
+    return q1, q2, q3, s1, s2, s3, I, S
+
+def tobin(state,varname,base_name,path='./'):
+    filename = varname+'_'+base_name
+    output_file  = open(os.path.join(path,filename),'wb')
+    state.tofile(output_file)
+    output_file.close()
 
 def tovtk(q1,q2,q3,I,S,filename):
     scalars = [("Q1", q1),
@@ -90,7 +99,7 @@ if __name__ == "__main__":
 
     # get the pickle file and cell number
 
-    pkl_file_name = glob(path+'*.pkl')
+    pkl_file_name = glob(os.path.join(path,'*.pkl'))
     pkl_file = open(pkl_file_name[0],'rb')
     pkl = pickle.load(pkl_file)
 
@@ -103,8 +112,20 @@ if __name__ == "__main__":
                    ]
     dimensions = (nx, ny, 1) 
 
+    file_name = glob(os.path.join(path,'step*.dat'))
+    file_name.sort()
+    for n,filename in enumerate(file_name):
+        m = filename.split('step')[1].split('.')[0].zfill(7)
+        print m
+        q1,q2,q3,s1,s2,s3,I,S = read(filename)
+        #vtkname = filename.replace('.dat', '.vtk')
+        base_name = str(m).zfill(4)+'.databin'
+        tobin(s1,'s1',base_name,path)
+        tobin(s2,'s2',base_name,path)
+        tobin(q1,'q1',base_name,path)
+        tobin(q2,'q2',base_name,path)
+        tobin(q3,'q3',base_name,path)
+        tobin(S,'S',base_name,path)
+        tobin(I,'I',base_name,path)
 
-    for filename in glob(path+'step*.dat'):
-        q1,q2,q3,I,S = read(filename)
-        vtkname = filename.replace('.dat', '.vtk')
-        tovtk(q1,q2,q3,I,S,vtkname)
+        #tovtk(q1,q2,q3,I,S,vtkname)
