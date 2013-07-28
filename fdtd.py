@@ -10,8 +10,8 @@ import numpy as np
 # -------- GLOBAL SCALAR DEFINITIONS -----------------------------
 
 n_frames    = 100
-save_outdir = './_nanorods2/'
-save_name   = 'nanorods2'
+save_outdir = './_movingn_v061/'
+save_name   = 'moving'
 liveview    = False
 write_q     = True
 write_aux   = True
@@ -21,13 +21,13 @@ mode        = 'TM'
 debug_eta   = True
 debug_auxbc = False
 vaccum_ones = False
-before_step = False
+before_step = True
 # ======== all definitions are in m,s,g unit system.
 # ....... dimensions .............................................
 x_lower = 0.0
-x_upper = 50.0e-6                    # lenght [m]
+x_upper = 300.0e-6                    # lenght [m]
 y_lower = 0.0
-y_upper = 50.0e-6                   # notice that for multilayer this is value will be over-written
+y_upper = 10.0e-6                   # notice that for multilayer this is value will be over-written
 mid_x = (x_upper-x_lower)/2.0 - 10e-6
 mid_y = (y_upper-y_lower)/2.0
 # ........ material properties ...................................
@@ -45,7 +45,7 @@ co      = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
 zo      = np.sqrt(mo/eo)
 
 # material
-mat_shape       = 'custom'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_shape       = 'gaussian_x'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 mat_nonliner    = False
 mat_dispersion  = False
 # initialize material properties and fill with default values (this should become class material)
@@ -59,19 +59,20 @@ if mat_shape == 'interface' or 'interfacex' or 'interfacey':
         mat_change  = (y_upper-y_lower)/2.0
 
 if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
+    print 'gaussian'
     eta             = np.ones([3])
     delta_eta       = np.zeros([3])
-    eta_velocity    = np.zeros([2,3])#*0.61*co
+    eta_velocity    = np.ones([2,3])*0.61*co
     eta_offset      = np.zeros([2,3])
     eta_sigma       = np.zeros([2,3])
     # once the material class is created the settings below should be created as defaults
     eta             = eta*1.5
     delta_eta       = 0.1*eta
-    eta_offset[0,:].fill(mid_x)
+    eta_offset[0,:].fill(8e-6)
     eta_offset[1,:].fill(mid_y)
-    eta_sigma[0,:].fill(5.0e-6)#(x_upper-x_lower)/25.0)
-    eta_sigma[1,:].fill(5.0e-6)#(y_upper-y_lower)/25.0)
-    eta_sigma.fill(5.0e-6)
+    # eta_sigma[0,:].fill(5.0e-6)#(x_upper-x_lower)/25.0)
+    # eta_sigma[1,:].fill(5.0e-6)#(y_upper-y_lower)/25.0)
+    # eta_sigma.fill(5.0e-6)
     eta_sigma.fill(5.0e-6)
 
 if mat_shape =='multilayer':
@@ -135,7 +136,7 @@ ex_kvector[0] = k                   # propagation along the x-direction
 
 # get the minimum speed in the medium
 v = np.zeros([2])
-if mat_shape == 'gaussian1dx':
+if mat_shape == 'gaussian_x':
     v[0] = co/(eta.max()+delta_eta.max())
     v[1] = co/(eta.min())
 elif mat_shape == 'multilayer':

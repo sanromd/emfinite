@@ -23,15 +23,19 @@ def tobin(state,varname,base_name,path='./'):
     state.tofile(output_file)
     output_file.close()
 
-def tovtk(q1,q2,q3,I,S,filename):
+def tovtk(q1,q2,q3,s1,s2,s3,I,S,base_name,path):
     scalars = [("Q1", q1),
                ("Q2", q2),
                ("Q3", q3),
+               ("S1", s1),
+               ("S2", s2),
+               ("S3", s3),
                ("I",   I),
                ("S",   S)]
     vectors = []
     title = 'VTK Data'
-
+    filename = os.path.join(path,base_name+'.vtk')
+    print filename
     fh = open(filename, 'wb')
     fh_write = lambda s: fh.write(s.encode('ascii'))
 
@@ -105,7 +109,8 @@ if __name__ == "__main__":
 
     nx = pkl.get('nx')
     ny = pkl.get('ny')
-
+    print nx,ny
+    
     coordinates = [np.linspace(0,1,nx),
                    np.linspace(0,1,ny),
                    np.ones(1),
@@ -118,14 +123,15 @@ if __name__ == "__main__":
         m = filename.split('step')[1].split('.')[0].zfill(7)
         print m
         q1,q2,q3,s1,s2,s3,I,S = read(filename)
-        #vtkname = filename.replace('.dat', '.vtk')
-        base_name = str(m).zfill(4)+'.databin'
-        tobin(s1,'s1',base_name,path)
-        tobin(s2,'s2',base_name,path)
-        tobin(q1,'q1',base_name,path)
-        tobin(q2,'q2',base_name,path)
-        tobin(q3,'q3',base_name,path)
-        tobin(S,'S',base_name,path)
-        tobin(I,'I',base_name,path)
+        # vtkname = filename.replace('.dat', '.vtk')
+        # base_name = str(m).zfill(4)+'.databin'
+        # tobin(s1,'s1',base_name,path)
+        # tobin(s2,'s2',base_name,path)
+        # tobin(q1,'q1',base_name,path)
+        # tobin(q2,'q2',base_name,path)
+        # tobin(q3,'q3',base_name,path)
+        # tobin(S,'S',base_name,path)
+        # tobin(I,'I',base_name,path)
 
-        #tovtk(q1,q2,q3,I,S,vtkname)
+        base_name = str(m).zfill(4)
+        tovtk(q1,q2,q3,s1,s2,s3,I,S,base_name,path)
