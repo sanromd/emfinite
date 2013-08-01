@@ -117,7 +117,7 @@ if __name__ == "__main__":
                    ]
     dimensions = (nx, ny, 1) 
 
-    file_name = glob(os.path.join(path,'step*.dat'))
+    file_name = glob(os.path.join(path,'step*.bin'))
     file_name.sort()
     for n,filename in enumerate(file_name):
         m = filename.split('step')[1].split('.')[0].zfill(7)
@@ -133,5 +133,5 @@ if __name__ == "__main__":
         # tobin(S,'S',base_name,path)
         # tobin(I,'I',base_name,path)
 
-        base_name = str(m).zfill(4)
+        base_name = 'step'+str(m).zfill(4)
         tovtk(q1,q2,q3,s1,s2,s3,I,S,base_name,path)
