@@ -25,8 +25,8 @@ vaccum_ones = False
 before_step = False
 # ======== all definitions are in m,s,g unit system.
 # ....... dimensions .............................................
-x_lower = -50.0e-6
-x_upper = 100.0e-6                    # lenght [m]
+x_lower = -10.0e-6
+x_upper = 50.0e-6                    # lenght [m]
 y_lower = -30.0e-6
 y_upper = 30.0e-6                   # notice that for multilayer this is value will be over-written
 mid_x = (x_upper-x_lower)/2.0
@@ -60,7 +60,6 @@ if mat_shape == 'interface' or 'interfacex' or 'interfacey':
         mat_change  = (y_upper-y_lower)/2.0
 
 if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
-    print 'gaussian'
     eta             = np.ones([3])
     delta_eta       = np.zeros([3])
     eta_velocity    = np.zeros([2,3])
@@ -73,7 +72,6 @@ if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
     eta_offset[1,:].fill(mid_y)
     eta_velocity[0,:].fill(0.61*co)
     eta_velocity[1,:].fill(0.0)
-    print eta_velocity
     # eta_sigma[0,:].fill(5.0e-6)#(x_upper-x_lower)/25.0)
     # eta_sigma[1,:].fill(5.0e-6)#(y_upper-y_lower)/25.0)
     # eta_sigma.fill(5.0e-6)
@@ -174,7 +172,7 @@ else:
 
 ddx = (x_upper-x_lower)/nx
 ddy = (y_upper-y_lower)/ny
-ddt = dt=0.20/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
+ddt = dt=0.5/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
 
 
 
@@ -307,7 +305,7 @@ def etar(da,ddx,ddy,t=0):
 
                 eta_out = eta_temp.copy()
     elif mat_shape=='custom':
-        r       = np.asarray([1e-6,2e-6,3e-6,5e-6,8e-6,13e-6,21e-6]); 
+        r       = np.asarray([1.0e-6,2.0e-6,3.0e-6,5.0e-6,8.0e-6,13.0e-6,21.0e-6]); 
         # theta   = np.asarray([0.0,np.pi/8.0,np.pi/4.0,3.0*np.pi/8.0,np.pi/2.0])
         # phi     = np.asarray([0.0,np.pi/8.0,np.pi/4.0,3.0*np.pi/8.0,np.pi/2.0,5.0*np.pi/8.0,3.0*np.pi/4.0,7.0*np.pi/8.0,np.pi,9.0*np.pi/8.0,5.0*np.pi/4.0,11.0*np.pi/8.0,3.0*np.pi/2.0,13.0*np.pi/8.0,7.0*np.pi/4.0,15.0*np.pi/8.0])
         phi     = np.asarray([0.0,np.pi/8.0,np.pi/4.0,3.0*np.pi/8.0,np.pi/2.0,5.0*np.pi/8.0,3.0*np.pi/4.0,7.0*np.pi/8.0,np.pi])
@@ -317,8 +315,8 @@ def etar(da,ddx,ddy,t=0):
                 for k in range(0,phi.size):
                     x_off = r[j]*np.cos(phi[k]-np.pi/2);
                     y_off = r[j]*np.sin(phi[k]-np.pi/2);
-                    eta_out = eta_out  + 1*(np.sqrt((x-x_off)**2+(y-y_off)**2)<r_sph)
-        eta_out = eta_out + 1
+                    eta_out = eta_out  + 1.0*(np.sqrt((x-x_off)**2+(y-y_off)**2)<r_sph)
+        eta_out = eta_out + 1.0
         # # this material is based on the multilayer but has a modification to it to include the substrate and finite length rods
         # yi = np.arange(0,num_layers+1)*tlp
         # for m in range(0,num_materials):

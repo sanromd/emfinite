@@ -6,32 +6,40 @@ import sys, petsc4py, os
 petsc4py.init(sys.argv)
 import pickle as pkl
 import numpy as np
+from mpi4py import MPI
+from petsc4py import PETSc
 
 # -------- GLOBAL SCALAR DEFINITIONS -----------------------------
 
-n_frames    = 100
-save_outdir = './_movingn_v061/'
-save_name   = 'moving'
-liveview    = False
-write_q     = True
-write_aux   = True
-gauge       = False
-write_gauge = False
-mode        = 'TM'
-debug_eta   = True
-debug_auxbc = False
-vaccum_ones = False
-before_step = True
+n_frames        = 500
+save_outdir     = '/media/noor-labs/fdtd-test/_moving_061_gaussian'
+save_name       = 'moving'
+liveview        = False
+write_q         = True
+write_aux       = True
+gauge           = False
+write_gauge     = False
+mode            = 'TM'
+debug_eta       = True
+debug_auxbc     = False
+vaccum_ones     = False
+before_step     = True
+mat_shape       = 'gaussian'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_nonliner    = False
+mat_dispersion  = False
+info            = True
+
 # ======== all definitions are in m,s,g unit system.
+
 # ....... dimensions .............................................
 x_lower = 0.0
 x_upper = 300.0e-6                    # lenght [m]
 y_lower = 0.0
 y_upper = 10.0e-6                   # notice that for multilayer this is value will be over-written
-mid_x = (x_upper-x_lower)/2.0 - 10e-6
+mid_x = (x_upper-x_lower)/2.0
 mid_y = (y_upper-y_lower)/2.0
-# ........ material properties ...................................
 
+# ........ material properties ...................................
 # vacuum
 vac     = np.ones([3])
 if vaccum_ones:
@@ -44,10 +52,6 @@ else:
 co      = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
 zo      = np.sqrt(mo/eo)
 
-# material
-mat_shape       = 'gaussian_x'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
-mat_nonliner    = False
-mat_dispersion  = False
 # initialize material properties and fill with default values (this should become class material)
 if mat_shape == 'interface' or 'interfacex' or 'interfacey':
     eta             = np.ones([2,3])
@@ -57,23 +61,28 @@ if mat_shape == 'interface' or 'interfacex' or 'interfacey':
         mat_change  = (x_upper-x_lower)/2.0
     else:
         mat_change  = (y_upper-y_lower)/2.0
+else:
+    pass
 
 if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
-    print 'gaussian'
     eta             = np.ones([3])
     delta_eta       = np.zeros([3])
-    eta_velocity    = np.ones([2,3])*0.61*co
+    eta_velocity    = np.zeros([2,3])
     eta_offset      = np.zeros([2,3])
     eta_sigma       = np.zeros([2,3])
     # once the material class is created the settings below should be created as defaults
     eta             = eta*1.5
     delta_eta       = 0.1*eta
-    eta_offset[0,:].fill(8e-6)
+    eta_offset[0,:].fill(10.0e-6)
     eta_offset[1,:].fill(mid_y)
+    eta_velocity[0,:].fill(0.61*co)
+    eta_velocity[1,:].fill(0.0)
     # eta_sigma[0,:].fill(5.0e-6)#(x_upper-x_lower)/25.0)
     # eta_sigma[1,:].fill(5.0e-6)#(y_upper-y_lower)/25.0)
     # eta_sigma.fill(5.0e-6)
     eta_sigma.fill(5.0e-6)
+else:
+    pass
 
 if mat_shape =='multilayer':
     num_materials   = 2
@@ -85,11 +94,15 @@ if mat_shape =='multilayer':
     layers[1,3]     = layers[0,3] - 1
     layers[0,4]     = 15.0e-9
     layers[1,4]     = 50.0e-9
+else:
+    pass
 
 if mat_shape =='homogeneous':
     eta             = np.ones([3])*1.5
+else:
+    pass
 
-if mat_shape =='custom':
+if mat_shape =='nanorods':
     num_materials   = 2
     num_layers      = 50
     layers          = np.zeros([num_materials,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
@@ -99,11 +112,18 @@ if mat_shape =='custom':
     layers[1,3]     = layers[0,3] - 1
     layers[0,4]     = 10.0e-9
     layers[1,4]     = 50.0e-9
+else:
+    pass
 
 if mat_nonliner:
     chi2 = chi3 = np.zeros( [3], order='F')
+else:
+    pass
+
 if mat_dispersion:
     num_poles = 2
+else:
+    pass
 
 
 # ........ excitation - initial conditoons .......................
@@ -121,6 +141,7 @@ ex_sigma[2]     = (y_upper-y_lower)/2.0
 ex_offset[2]    = (y_upper-y_lower)/2.0
 
 # ........ Boundary settings settings .................
+
 bc_lower = ['scattering', 'scattering'] # left and bottom boundary contidions
 bc_upper = ['none', 'none'] # right and bootom
 
@@ -136,24 +157,38 @@ ex_kvector[0] = k                   # propagation along the x-direction
 
 # get the minimum speed in the medium
 v = np.zeros([2])
-if mat_shape == 'gaussian_x':
+if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
     v[0] = co/(eta.max()+delta_eta.max())
     v[1] = co/(eta.min())
-elif mat_shape == 'multilayer':
+else:
+    pass
+
+if mat_shape == 'multilayer':
     v[0] = co/(layers[:,0:3].max())
     v[1] = co/(layers[:,0:3].min())
-elif mat_shape == 'interface' or 'interfacex' or 'interfacey':
+else:
+    pass
+
+if mat_shape == 'interface' or 'interfacex' or 'interfacey':
     v[0] = co/(eta.max())
     v[1] = co/(eta.min())
-elif mat_shape == 'homogeneous':
+else:
+    pass
+
+if mat_shape == 'homogeneous':
     v[0] = v[1] = co/(eta.max())
-elif mat_shape == 'custom':
+else:
+    pass
+
+if mat_shape == 'nanorods':
     v[0] = co/(layers[:,0:3].max())
     v[1] = co/(layers[:,0:3].min())
+else:
+    pass
 
 
 # Grid - mesh settings
-nx = np.floor(50*(x_upper-x_lower)/ex_lambda)
+nx = np.floor(40*(x_upper-x_lower)/ex_lambda)
 
 if mat_shape=='multilayer':
     y_upper = num_layers*np.sum(layers[:,4])+layers[0,4]
@@ -170,22 +205,23 @@ else:
 
 ddx = (x_upper-x_lower)/nx
 ddy = (y_upper-y_lower)/ny
-ddt = dt=0.50/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
-
-
-
-dt = ddt
-t_final = (x_upper-x_lower)/v.min()
-max_steps = np.floor(t_final/ddt)+1
-n_write = np.floor(max_steps/n_frames)
-print 'speed velocity is ', v.min()
-print 'total distance in x-direction: ',x_upper-x_lower
-print 'ddx,ddy  ', ddx, ddy
-print 'nx, ny ', nx,ny
-print 't_final ', t_final,
-print 'max_steps ', max_steps
+ddt = dt = 0.50/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
 dxdt = dt/ddx
 dydt = dt/ddy
+
+t_final   = (x_upper-x_lower)/v.min()
+max_steps = np.floor(t_final/ddt)+1
+n_write   = np.floor(max_steps/n_frames)
+
+if MPI.COMM_WORLD.rank==0:
+    print 'wave velocity is ', v.min()
+    print 'total distance to propagate x-direction: ',x_upper-x_lower
+    print 'grid size, (ddx, ddy)  ', ddx, ddy
+    print 'grid points (nx, ny) ', nx,ny
+    print 'total propagation time ', t_final,
+    print 'number of time steps ', max_steps
+else:
+    pass
 
 if mode == 'TM':
     vac[0]  = eo
@@ -206,7 +242,7 @@ def etar(da,ddx,ddy,t=0):
 
     Implemented mappings
 
-    ..gaussian1dx:  stationary and moving gaussian shape for eps and mu
+    ..gaussian:     stationary and moving gaussian shape for eps and mu
     ..homogeneous:  homogeneous refractive index in eps and mu
     ..interface:    simple interface (jump) acroos the 2d domain
     ..interfacex:   simple interface (jump) 1D in x-direction
@@ -300,7 +336,7 @@ def etar(da,ddx,ddy,t=0):
                     eta_temp[2,:,:] = eta_out[2,:,:] + layers[m,2]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))
 
                 eta_out = eta_temp.copy()
-    elif mat_shape=='custom':
+    elif mat_shape=='nanorods':
         # this material is based on the multilayer but has a modification to it to include the substrate and finite length rods
         yi = np.arange(0,num_layers+1)*tlp
         for m in range(0,num_materials):
@@ -558,18 +594,18 @@ def write(Q1,Q2,Q3,filename):
 def gauges(da):
     from probe import Probe
     entries=[[ 0, 0],
-         [34,10],
-         [34,34],
-         [10,34],
-         [0,15],
-         ]
+             [34,10],
+             [34,34],
+             [10,34],
+             [0,15],
+            ]
     prb = Probe(da, entries)
     return prb
 
 # -------- MAIN PROGRAM --------------
 
 # create DA and allocate global and local variables
-from petsc4py import PETSc
+
 if mat_dispersion:
     from fdtd_da_pml import fdtddispersion2d as fdtd_2d
     from fdtd_da_pml import calcdispersion2d
@@ -610,6 +646,8 @@ if mat_dispersion:
     c1    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
     c2    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
     c3    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
+else:
+    pass
 
 aux = etar(da,ddx,ddy)
 aux_bc = auxbc(da)
@@ -619,23 +657,25 @@ try:
 except: OSError("directory already exist")
 
 if debug_eta:
-    print 'debug eta'
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as pylab
-    pylab.figure()
-    pylab.imshow(aux[1,:,:].transpose())
-    pylab.colorbar()
-    pylab.draw()
-    print 'saving'
-    pylab.savefig(save_outdir+'aux_'+save_name+'.png')
+    if MPI.COMM_WORLD.rank==0:
+        print 'printing debug eta'
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as pylab
+        pylab.figure()
+        pylab.imshow(aux[1,:,:].transpose())
+        pylab.colorbar()
+        pylab.draw()
+        print 'saving'
+        pylab.savefig(os.path.join(save_outdir,'aux_'+save_name+'.png'))
 
 if debug_auxbc:
     from matplotlib import pylab
     pylab.figure()
     pylab.pcolor(aux_bc[0,:,:].copy())
     pylab.colorbar()
-    pylab.show()
+    pylab.draw()
+    pylab.savefig(os.path.join(save_outdir,'aux_bc_'+save_name+'.png'))
 
 if liveview:
     draw = PETSc.Viewer.DRAW()
@@ -643,62 +683,69 @@ if liveview:
 
 
 # create a temporary dictionary with the parameters simulation
-if mat_shape=='gaussian1dx':
-    params  = { 'outdir':save_outdir,
-                'nx': nx,
-                'ny': ny,
-                'dt': dt,
-                'dx': ddx,
-                'dy': ddy,
-                'num_steps': max_steps,
-                't_final': t_final,
-                'dimensions': [x_lower,x_upper,y_lower,y_upper],
-                'shape': mat_shape,
-                'ex_type': ex_type,
-                'lambda': ex_lambda,
-                'eta': eta,
-                'eta_velocity':eta_velocity,
-                'bc_lower': bc_lower,
-                'bc_upper': bc_upper,
-                'aux_bc_lower': aux_bc_lower,
-                'aux_bc_upper': aux_bc_upper
-              }
-else:
-    params  = { 'outdir':save_outdir,
-                'nx': nx,
-                'ny': ny,
-                'dt': dt,
-                'dx': ddx,
-                'dy': ddy,
-                'num_steps': max_steps,
-                't_final': t_final,
-                'dimensions':[x_lower,x_upper,y_lower,y_upper],
-                'shape': mat_shape,
-                'ex_type': ex_type,
-                'lambda': ex_lambda,
-                'eta' : eta,
-                'bc_lower': bc_lower,
-                'bc_upper': bc_upper,
-                'aux_bc_lower': aux_bc_lower,
-                'aux_bc_upper': aux_bc_upper
-              }
+if MPI.COMM_WORLD.rank==0:
+    if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
+        params  = { 'outdir':save_outdir,
+                    'nx': nx,
+                    'ny': ny,
+                    'dt': dt,
+                    'dx': ddx,
+                    'dy': ddy,
+                    'num_steps': max_steps,
+                    't_final': t_final,
+                    'dimensions': [x_lower,x_upper,y_lower,y_upper],
+                    'shape': mat_shape,
+                    'ex_type': ex_type,
+                    'lambda': ex_lambda,
+                    'eta': eta,
+                    'eta_velocity':eta_velocity,
+                    'bc_lower': bc_lower,
+                    'bc_upper': bc_upper,
+                    'aux_bc_lower': aux_bc_lower,
+                    'aux_bc_upper': aux_bc_upper
+                  }
+    else:
+        params  = { 'outdir':save_outdir,
+                    'nx': nx,
+                    'ny': ny,
+                    'dt': dt,
+                    'dx': ddx,
+                    'dy': ddy,
+                    'num_steps': max_steps,
+                    't_final': t_final,
+                    'dimensions':[x_lower,x_upper,y_lower,y_upper],
+                    'shape': mat_shape,
+                    'ex_type': ex_type,
+                    'lambda': ex_lambda,
+                    'eta' : eta,
+                    'bc_lower': bc_lower,
+                    'bc_upper': bc_upper,
+                    'aux_bc_lower': aux_bc_lower,
+                    'aux_bc_upper': aux_bc_upper
+                  }
 
-pkl_out = open(save_outdir+save_name+'.pkl', 'wb')
-pkl.dump(params, pkl_out)
-pkl_out.close()
-
+    pkl_out = open(os.path.join(save_outdir,save_name+'.pkl'), 'wb')
+    pkl.dump(params, pkl_out)
+    pkl_out.close()
+ki = int(0)
 for n in range(0,int(max_steps)):
     if n == 0:
         t = n*dt
         qinit(Q1,Q2,Q3,da)
         qbc(Q1,Q2,Q3,da,t)
+    else:
+        pass
+
     t = n*dt
 
     if before_step:
         aux = etar(da,ddx,ddy,t)
+    else:
+        pass
 
     bc_scattering(Q1,Q2,Q3,da,t,0,0)
     bc_scattering(Q1,Q2,Q3,da,t,1,0)
+    
     if mat_dispersion:
         da.globalToLocal(Q1, Q1loc)
         da.globalToLocal(Q2, Q2loc)
@@ -727,16 +774,22 @@ for n in range(0,int(max_steps)):
 
     if liveview:
         Q3.view(draw)
+    
     if np.mod(n,n_write)==0:
         if write_q:
-            write(Q1,Q3,Q3,save_outdir+'step%d.dat' % n)
-        print 100*n/max_steps
+            save_q_name = 'step'+str(ki).zfill(len(str(int(n_frames)))+2)+'.bin'
+            write(Q1,Q3,Q3,os.path.join(save_outdir,save_q_name))
+            ki = ki+1
+        if info:
+            if MPI.COMM_WORLD.rank == 0:
+                print 'percentage of simulation completed: ', 100.0*n/max_steps, ' at time  ', t
+
     if gauge:
         prb = gauges(da)
-        prb.probe('Q2', Q1)
-        prb.probe('Q3', Q2)
+        prb.probe('Q2', Q2)
+        prb.probe('Q3', Q3)
 
 if write_gauge and gauge:
-    prb.save(save_outdir+"probe.dat")
+    prb.save(os.path.join(save_outdir,'probe'+save_name+'.dat'))
 
 sys.exit()
