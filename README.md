@@ -1,4 +1,4 @@
 emfinite
 ========
 
-PETSc FDTD implementation for the solution of Maxwell's electrodynamic equations in anistropic, dispersive and time-varying materials
+PETSc FDTD solver to Maxwell electrodynamic equations for non-linear, anisotropic and time-varying materials.
