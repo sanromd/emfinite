@@ -11,10 +11,10 @@ from petsc4py import PETSc
 
 # -------- GLOBAL SCALAR DEFINITIONS -----------------------------
 
-n_frames        = 500
-save_outdir     = '/media/noor-labs/fdtd-test/_moving_061_gaussian'
-save_name       = 'moving'
-liveview        = False
+n_frames        = 100
+save_outdir     = './homework/test'
+save_name       = 'sphere'
+liveview        = True
 write_q         = True
 write_aux       = True
 gauge           = False
@@ -24,18 +24,18 @@ debug_eta       = True
 debug_auxbc     = False
 vaccum_ones     = False
 before_step     = True
-mat_shape       = 'gaussian'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
+mat_shape       = 'homogeneous'           # material definition: homogeneous, interface, rip (moving perturbation), multilayered
 mat_nonliner    = False
 mat_dispersion  = False
 info            = True
-
+cfl_desired     = 0.9
 # ======== all definitions are in m,s,g unit system.
 
 # ....... dimensions .............................................
 x_lower = 0.0
-x_upper = 300.0e-6                    # lenght [m]
+x_upper = 20.0e-6                    # lenght [m]
 y_lower = 0.0
-y_upper = 10.0e-6                   # notice that for multilayer this is value will be over-written
+y_upper = 20.0e-6                   # notice that for multilayer this is value will be over-written
 mid_x = (x_upper-x_lower)/2.0
 mid_y = (y_upper-y_lower)/2.0
 
@@ -52,78 +52,8 @@ else:
 co      = 1.0/np.sqrt(eo*mo)           # vacuum speed of light - [m/s]
 zo      = np.sqrt(mo/eo)
 
-# initialize material properties and fill with default values (this should become class material)
-if mat_shape == 'interface' or 'interfacex' or 'interfacey':
-    eta             = np.ones([2,3])
-    eta[0,:]        = 1.0
-    eta[1,:]        = 2.0
-    if mat_shape == 'interfacex':
-        mat_change  = (x_upper-x_lower)/2.0
-    else:
-        mat_change  = (y_upper-y_lower)/2.0
-else:
-    pass
 
-if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
-    eta             = np.ones([3])
-    delta_eta       = np.zeros([3])
-    eta_velocity    = np.zeros([2,3])
-    eta_offset      = np.zeros([2,3])
-    eta_sigma       = np.zeros([2,3])
-    # once the material class is created the settings below should be created as defaults
-    eta             = eta*1.5
-    delta_eta       = 0.1*eta
-    eta_offset[0,:].fill(10.0e-6)
-    eta_offset[1,:].fill(mid_y)
-    eta_velocity[0,:].fill(0.61*co)
-    eta_velocity[1,:].fill(0.0)
-    # eta_sigma[0,:].fill(5.0e-6)#(x_upper-x_lower)/25.0)
-    # eta_sigma[1,:].fill(5.0e-6)#(y_upper-y_lower)/25.0)
-    # eta_sigma.fill(5.0e-6)
-    eta_sigma.fill(5.0e-6)
-else:
-    pass
-
-if mat_shape =='multilayer':
-    num_materials   = 2
-    num_layers      = 10
-    layers          = np.zeros([num_materials,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
-    layers[0,0:3]   = 1.0
-    layers[1,0:3]   = 2.0
-    layers[0,3]     = 10
-    layers[1,3]     = layers[0,3] - 1
-    layers[0,4]     = 15.0e-9
-    layers[1,4]     = 50.0e-9
-else:
-    pass
-
-if mat_shape =='homogeneous':
-    eta             = np.ones([3])*1.5
-else:
-    pass
-
-if mat_shape =='nanorods':
-    num_materials   = 2
-    num_layers      = 50
-    layers          = np.zeros([num_materials,9]) # _layer:  eps mu N t chi2e chi2m chi3e chi3m
-    layers[0,0:3]   = 1.0
-    layers[1,0:3]   = 2.0
-    layers[0,3]     = 10
-    layers[1,3]     = layers[0,3] - 1
-    layers[0,4]     = 10.0e-9
-    layers[1,4]     = 50.0e-9
-else:
-    pass
-
-if mat_nonliner:
-    chi2 = chi3 = np.zeros( [3], order='F')
-else:
-    pass
-
-if mat_dispersion:
-    num_poles = 2
-else:
-    pass
+eta = np.ones([3])*1.0
 
 
 # ........ excitation - initial conditoons .......................
@@ -157,55 +87,16 @@ ex_kvector[0] = k                   # propagation along the x-direction
 
 # get the minimum speed in the medium
 v = np.zeros([2])
-if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
-    v[0] = co/(eta.max()+delta_eta.max())
-    v[1] = co/(eta.min())
-else:
-    pass
-
-if mat_shape == 'multilayer':
-    v[0] = co/(layers[:,0:3].max())
-    v[1] = co/(layers[:,0:3].min())
-else:
-    pass
-
-if mat_shape == 'interface' or 'interfacex' or 'interfacey':
-    v[0] = co/(eta.max())
-    v[1] = co/(eta.min())
-else:
-    pass
-
-if mat_shape == 'homogeneous':
-    v[0] = v[1] = co/(eta.max())
-else:
-    pass
-
-if mat_shape == 'nanorods':
-    v[0] = co/(layers[:,0:3].max())
-    v[1] = co/(layers[:,0:3].min())
-else:
-    pass
+v[0] = v[1] = co/(eta.max())
 
 
 # Grid - mesh settings
-nx = np.floor(40*(x_upper-x_lower)/ex_lambda)
-
-if mat_shape=='multilayer':
-    y_upper = num_layers*np.sum(layers[:,4])+layers[0,4]
-    tlp = np.sum(layers[:,4])
-    mlp = np.floor(tlp/1e-9)
-    ny = np.floor((y_upper-y_lower)/2.5e-9)
-elif mat_shape=='custom':
-    y_upper = num_layers*np.sum(layers[:,4])+layers[0,4]
-    tlp = np.sum(layers[:,4])
-    mlp = np.floor(tlp/1.0e-9)
-    ny = np.floor((y_upper-y_lower)/1.0e-9)
-else:
-    ny = np.floor(20*(y_upper-y_lower)/ex_lambda)
+nx = np.floor(20*(x_upper-x_lower)/ex_lambda)
+ny = np.floor(20*(y_upper-y_lower)/ex_lambda)
 
 ddx = (x_upper-x_lower)/nx
 ddy = (y_upper-y_lower)/ny
-ddt = dt = 0.50/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
+ddt = dt = cfl_desired/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
 dxdt = dt/ddx
 dydt = dt/ddy
 
@@ -214,27 +105,27 @@ max_steps = np.floor(t_final/ddt)+1
 n_write   = np.floor(max_steps/n_frames)
 
 if MPI.COMM_WORLD.rank==0:
-    print 'wave velocity is ', v.min()
-    print 'total distance to propagate x-direction: ',x_upper-x_lower
-    print 'grid size, (ddx, ddy)  ', ddx, ddy
-    print 'grid points (nx, ny) ', nx,ny
-    print 'total propagation time ', t_final,
-    print 'number of time steps ', max_steps
-else:
-    pass
+    print 'wave velocity is          ', v.min()
+    print 'x-propagation distance    ',x_upper-x_lower
+    print 'grid size, (ddx, ddy)     ', ddx, ddy
+    print 'grid points (nx, ny)      ', nx,ny
+    print 'total propagation time    ', t_final,
+    print 'number of time steps      ', max_steps
+
 
 if mode == 'TM':
-    vac[0]  = eo
-    vac[1]  = eo
-    vac[2]  = mo
-else:
-    print 'TE mode not implemented ---  self-destructing (!)'
-    1/0
+    vac[0] = eo
+    vac[1] = eo
+    vac[2] = mo
+elif mode == 'TE':
+    vac[0] = mo
+    vac[1] = mo
+    vac[2] = eo
 
 
 # -------- GLOBAL FUNCTION DEFINITIONS --------------
 
-def etar(da,ddx,ddy,t=0):
+def etar(da,t=0):
     """
     eta = etar(num_aux,xi,xf,yi,yf,ddx,ddy)
 
@@ -270,96 +161,10 @@ def etar(da,ddx,ddy,t=0):
     eta_out = np.zeros( [3,len(X),len(Y)], order='F')
     eta_temp = eta_out.copy()
 
-    if mat_shape=='gaussian_x':
-        u_x_eta1 = x - eta_velocity[0,0]*t - eta_offset[0,0]
-        u_x_eta2 = x - eta_velocity[0,1]*t - eta_offset[0,1]
-        u_x_eta3 = x - eta_velocity[0,2]*t - eta_offset[0,2]
-
-        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2
-        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2
-        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2
-
-        eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1) + eta[0]
-        eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2) + eta[1]
-        eta_out[2,:,:] = delta_eta[2]*np.exp(-u_eta3) + eta[2]
-    elif mat_shape=='gaussian_y':
-        u_y_eta1 = y - eta_velocity[1,0]*t - eta_offset[1,0]
-        u_y_eta2 = y - eta_velocity[1,1]*t - eta_offset[1,1]
-        u_y_eta3 = y - eta_velocity[1,2]*t - eta_offset[1,2]
-
-        u_eta1 = (u_y_eta1/eta_sigma[1,0])**2
-        u_eta2 = (u_y_eta2/eta_sigma[1,1])**2
-        u_eta3 = (u_y_eta3/eta_sigma[1,2])**2
-
-        eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1) + eta[0]
-        eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2) + eta[1]
-        eta_out[2,:,:] = delta_eta[2]*np.exp(-u_eta3) + eta[2]
-    elif mat_shape=='gaussian':
-        u_x_eta1 = x - eta_velocity[0,0]*t - eta_offset[0,0]
-        u_x_eta2 = x - eta_velocity[0,1]*t - eta_offset[0,1]
-        u_x_eta3 = x - eta_velocity[0,2]*t - eta_offset[0,2]
-        u_y_eta1 = y - eta_velocity[1,0]*t - eta_offset[1,0]
-        u_y_eta2 = y - eta_velocity[1,1]*t - eta_offset[1,1]
-        u_y_eta3 = y - eta_velocity[1,2]*t - eta_offset[1,2]
-
-        u_eta1 = (u_x_eta1/eta_sigma[0,0])**2 + (u_y_eta1/eta_sigma[1,0])**2
-        u_eta2 = (u_x_eta2/eta_sigma[0,1])**2 + (u_y_eta2/eta_sigma[1,1])**2
-        u_eta3 = (u_x_eta3/eta_sigma[0,2])**2 + (u_y_eta3/eta_sigma[1,2])**2
-
-        eta_out[0,:,:] = delta_eta[0]*np.exp(-u_eta1) + eta[0]
-        eta_out[1,:,:] = delta_eta[1]*np.exp(-u_eta2) + eta[1]
-        eta_out[2,:,:] = delta_eta[2]*np.exp(-u_eta3) + eta[2]
-    elif mat_shape=='homogeneous':
-        eta_out[0,:,:] = eta[0]
-        eta_out[1,:,:] = eta[1]
-        eta_out[2,:,:] = eta[2]
-    elif mat_shape=='interfacex':
-        print eta
-        eta_out[0,:,:] = eta[0,0]*(x<mat_change) + eta[1,0]*(x>=mat_change)
-        eta_out[1,:,:] = eta[0,1]*(x<mat_change) + eta[1,1]*(x>=mat_change)
-        eta_out[2,:,:] = eta[0,2]*(x<mat_change) + eta[1,2]*(x>=mat_change)
-    elif mat_shape=='interfacey':
-        eta_out[0,:,:] = eta[0,0]*(y<mat_change) + eta[1,0]*(y>=mat_change)
-        eta_out[1,:,:] = eta[0,1]*(y<mat_change) + eta[1,1]*(y>=mat_change)
-        eta_out[2,:,:] = eta[0,2]*(y<mat_change) + eta[1,2]*(y>=mat_change)
-    elif mat_shape=='multilayer':
-        yi = np.arange(0,num_layers+1)*tlp
-        for m in range(0,num_materials):
-            for i in range(0,num_layers+1):
-                if m==0:
-                    eta_temp[0,:,:] = eta_out[0,:,:] + layers[0,0]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
-                    eta_temp[1,:,:] = eta_out[1,:,:] + layers[0,1]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
-                    eta_temp[2,:,:] = eta_out[2,:,:] + layers[0,2]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))
-                else:
-                    eta_temp[0,:,:] = eta_out[0,:,:] + layers[m,0]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))
-                    eta_temp[1,:,:] = eta_out[1,:,:] + layers[m,1]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))
-                    eta_temp[2,:,:] = eta_out[2,:,:] + layers[m,2]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))
-
-                eta_out = eta_temp.copy()
-    elif mat_shape=='nanorods':
-        # this material is based on the multilayer but has a modification to it to include the substrate and finite length rods
-        yi = np.arange(0,num_layers+1)*tlp
-        for m in range(0,num_materials):
-            for i in range(0,num_layers+1):
-                if m==0:
-                    eta_temp[0,:,:] = eta_out[0,:,:] + layers[0,0]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
-                    eta_temp[1,:,:] = eta_out[1,:,:] + layers[0,1]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
-                    eta_temp[2,:,:] = eta_out[2,:,:] + layers[0,2]*(y>=yi[i])*(y<=(yi[i]+layers[0,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
-                else:
-                    eta_temp[0,:,:] = eta_out[0,:,:] + layers[m,0]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
-                    eta_temp[1,:,:] = eta_out[1,:,:] + layers[m,1]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
-                    eta_temp[2,:,:] = eta_out[2,:,:] + layers[m,2]*(y>(yi[i]+layers[m-1,4]))*(y<(yi[i]+layers[m-1,4]+layers[m,4]))*(x>=mid_x)*(x<=(mid_x+10e-6))
-
-                eta_out = eta_temp.copy()
-        
-        eta_out = eta_out + 1.4*(x<mid_x)
-        eta_out[eta_out==0.0] = 1.0
-
-
-        # eta_out[0,:,:] += layers[0,0]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
-        # eta_out[1,:,:] += layers[0,1]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4])
-        # eta_out[2,:,:] += layers[0,2]*(num_layers*tlp<y)*(y<=num_layers*tlp+layers[0,4]) 
-
+    eta_out[0,:,:] = eta[0]
+    eta_out[1,:,:] = eta[1]
+    eta_out[2,:,:] = eta[2]
+   
     eta_out[0,:,:] = eta_out[0,:,:]*vac[0]
     eta_out[1,:,:] = eta_out[1,:,:]*vac[1]
     eta_out[2,:,:] = eta_out[2,:,:]*vac[2]
@@ -602,6 +407,27 @@ def gauges(da):
     prb = Probe(da, entries)
     return prb
 
+def pec_sphere(Q1,Q2,Q3,da):
+    """
+    Create sphere of PEC
+    """
+    nx, ny = da.getSizes()
+    (xi, xf), (yi, yf) = da.getRanges()
+
+    q1 = da.getVecArray(Q1)
+    q2 = da.getVecArray(Q2)
+    q3 = da.getVecArray(Q3)
+
+
+    X = np.linspace(xi*ddx,xf*ddx,xf-xi)
+    Y = np.linspace(yi*ddy,yf*ddy,yf-yi)
+    y,x = np.meshgrid(Y,X)
+    r2 = (x - mid_x)**2 + (y - mid_y)**2
+    r = np.sqrt(r2)
+    q1[np.where(r<=5e-6)[0]+xi,np.where(r<=5e-6)[1]+yi] = 0.0
+    q2[np.where(r<=5e-6)[0]+xi,np.where(r<=5e-6)[1]+yi] = 0.0 #zo*np.exp(-r2/(sdd**2))
+    q3[np.where(r<=5e-6)[0]+xi,np.where(r<=5e-6)[1]+yi] = 0.0 #1.0*np.exp(-r2/(sdd**2))
+
 # -------- MAIN PROGRAM --------------
 
 # create DA and allocate global and local variables
@@ -649,7 +475,7 @@ if mat_dispersion:
 else:
     pass
 
-aux = etar(da,ddx,ddy)
+aux = etar(da)
 aux_bc = auxbc(da)
 
 try:
@@ -684,64 +510,42 @@ if liveview:
 
 # create a temporary dictionary with the parameters simulation
 if MPI.COMM_WORLD.rank==0:
-    if mat_shape == 'gaussian_x' or 'gaussian_y' or 'gaussian':
-        params  = { 'outdir':save_outdir,
-                    'nx': nx,
-                    'ny': ny,
-                    'dt': dt,
-                    'dx': ddx,
-                    'dy': ddy,
-                    'num_steps': max_steps,
-                    't_final': t_final,
-                    'dimensions': [x_lower,x_upper,y_lower,y_upper],
-                    'shape': mat_shape,
-                    'ex_type': ex_type,
-                    'lambda': ex_lambda,
-                    'eta': eta,
-                    'eta_velocity':eta_velocity,
-                    'bc_lower': bc_lower,
-                    'bc_upper': bc_upper,
-                    'aux_bc_lower': aux_bc_lower,
-                    'aux_bc_upper': aux_bc_upper
-                  }
-    else:
-        params  = { 'outdir':save_outdir,
-                    'nx': nx,
-                    'ny': ny,
-                    'dt': dt,
-                    'dx': ddx,
-                    'dy': ddy,
-                    'num_steps': max_steps,
-                    't_final': t_final,
-                    'dimensions':[x_lower,x_upper,y_lower,y_upper],
-                    'shape': mat_shape,
-                    'ex_type': ex_type,
-                    'lambda': ex_lambda,
-                    'eta' : eta,
-                    'bc_lower': bc_lower,
-                    'bc_upper': bc_upper,
-                    'aux_bc_lower': aux_bc_lower,
-                    'aux_bc_upper': aux_bc_upper
-                  }
+    params  = { 'outdir':save_outdir,
+                'nx': nx,
+                'ny': ny,
+                'dt': dt,
+                'dx': ddx,
+                'dy': ddy,
+                'num_steps': max_steps,
+                't_final': t_final,
+                'dimensions':[x_lower,x_upper,y_lower,y_upper],
+                'shape': mat_shape,
+                'ex_type': ex_type,
+                'lambda': ex_lambda,
+                'eta' : eta,
+                'bc_lower': bc_lower,
+                'bc_upper': bc_upper,
+                'aux_bc_lower': aux_bc_lower,
+                'aux_bc_upper': aux_bc_upper
+              }
 
     pkl_out = open(os.path.join(save_outdir,save_name+'.pkl'), 'wb')
     pkl.dump(params, pkl_out)
     pkl_out.close()
+
 ki = int(0)
 for n in range(0,int(max_steps)):
     if n == 0:
         t = n*dt
         qinit(Q1,Q2,Q3,da)
         qbc(Q1,Q2,Q3,da,t)
-    else:
-        pass
 
     t = n*dt
 
     if before_step:
-        aux = etar(da,ddx,ddy,t)
-    else:
-        pass
+        pec_sphere(Q1,Q2,Q3,da)
+        #aux = etar(da,ddx,ddy,t)
+
 
     bc_scattering(Q1,Q2,Q3,da,t,0,0)
     bc_scattering(Q1,Q2,Q3,da,t,1,0)
@@ -782,7 +586,7 @@ for n in range(0,int(max_steps)):
             ki = ki+1
         if info:
             if MPI.COMM_WORLD.rank == 0:
-                print 'percentage of simulation completed: ', 100.0*n/max_steps, ' at time  ', t
+                print 'percentage of simulation completed: ', str(np.floor(100.0*n/max_steps))[0:3], ' at time  ', str(t)[0:10]
 
     if gauge:
         prb = gauges(da)
