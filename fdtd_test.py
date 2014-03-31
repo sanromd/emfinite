@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
-
+# ddd
+# sanity check for submodule working and pushing to...
 import sys, petsc4py, os
 petsc4py.init(sys.argv)
 import pickle as pkl
@@ -13,7 +14,7 @@ from petsc4py import PETSc
 n_frames        = 10
 save_outdir     = './homework/test'
 save_name       = 'sphere'
-liveview        = True
+liveview        = False
 write_q         = True
 write_aux       = True
 gauge           = False
@@ -75,7 +76,7 @@ bc_lower = ['scattering', 'scattering'] # left and bottom boundary contidions
 bc_upper = ['none', 'none'] # right and bootom
 
 aux_bc_lower = ['none', 'none'] # left and bottom boundary contidions
-aux_bc_upper = ['pml', 'none' ] # right and bootom
+aux_bc_upper = ['pml', 'none'] # right and bootom
 
 # ........ pre-calculations for wave propagation .................
 
@@ -87,30 +88,6 @@ ex_kvector[0] = k                   # propagation along the x-direction
 # get the minimum speed in the medium
 v = np.zeros([2])
 v[0] = v[1] = co/(eta.max())
-
-
-# Grid - mesh settings
-nx = np.floor(20*(x_upper-x_lower)/ex_lambda)
-ny = np.floor(20*(y_upper-y_lower)/ex_lambda)
-
-ddx = (x_upper-x_lower)/nx
-ddy = (y_upper-y_lower)/ny
-ddt = dt = cfl_desired/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
-dxdt = dt/ddx
-dydt = dt/ddy
-
-t_final   = (x_upper-x_lower)/v.min()
-max_steps = np.floor(t_final/ddt)+1
-n_write   = np.floor(max_steps/n_frames)
-
-if MPI.COMM_WORLD.rank==0:
-    print 'wave velocity is          ', v.min()
-    print 'x-propagation distance    ', x_upper-x_lower
-    print 'grid size, (ddx, ddy)     ', ddx, ddy
-    print 'grid points (nx, ny)      ', nx,ny
-    print 'total propagation time    ', t_final,
-    print 'number of time steps      ', max_steps
-
 
 if mode == 'TM':
     vac[0] = eo
@@ -429,167 +406,260 @@ def pec_sphere(Q1,Q2,Q3,da):
 
 # -------- MAIN PROGRAM --------------
 
-# create DA and allocate global and local variables
+error = np.zeros([3,10,9])
+error[:,:,0] = 2**np.arange(4,14,1)
+print error
+timeVec1 = PETSc.Vec().createWithArray([0])
+timeVec2 = PETSc.Vec().createWithArray([0])
+timeVec3 = PETSc.Vec().createWithArray([0])
+tic1 = MPI.Wtime()
+for test in np.arange(4,14,1):
+    nx = ny = 2**test
+    ddx = (x_upper-x_lower)/nx
+    ddy = (y_upper-y_lower)/ny
+    ddt = dt = cfl_desired/(co*np.sqrt(1.0/(ddx**2)+1.0/(ddy**2)))
+    dxdt = dt/ddx
+    dydt = dt/ddy
 
-from fdtd_da_pml import fdtd2d as fdtd_2d
+    t_final   = (x_upper-x_lower)/v.min()
+    max_steps = np.floor(t_final/ddt)+1
+    n_write   = np.floor(max_steps/n_frames)
 
-stype  = PETSc.DA.StencilType.STAR
-swidth = 1
-da = PETSc.DA().create([nx,ny], dof=1,
-                       stencil_type=stype,
-                       stencil_width=swidth)
-
-( xi, xf), ( yi, yf) = da.getRanges()
-(gxi,gxf), (gyi,gyf) = da.getGhostRanges()
-
-Q1 = da.createGlobalVec()
-Q2 = da.createGlobalVec()
-Q3 = da.createGlobalVec()
-Q1loc = da.createLocalVec()
-Q2loc = da.createLocalVec()
-Q3loc = da.createLocalVec()
-
-q1 = Q1loc.getArray().reshape([gxf-gxi,gyf-gyi], order='F')
-q2 = Q2loc.getArray().reshape([gxf-gxi,gyf-gyi], order='F')
-q3 = Q3loc.getArray().reshape([gxf-gxi,gyf-gyi], order='F')
-
-s1  = np.zeros([xf-xi,yf-yi], order='F')
-s2  = np.zeros([xf-xi,yf-yi], order='F')
-s3  = np.zeros([xf-xi,yf-yi], order='F')
-s4  = np.zeros([xf-xi,yf-yi], order='F')
-
-if mat_dispersion:
-    p1    = np.zeros([num_poles,3,xf-xi,yf-yi], order='F')
-    p2    = np.zeros([num_poles,3,xf-xi,yf-yi], order='F')
-    p3    = np.zeros([num_poles,3,xf-xi,yf-yi], order='F')
-    psum  = np.zeros([3,xf-xi,yf-yi], order='F')
- 
-    c1    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
-    c2    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
-    c3    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
-else:
-    pass
-
-aux = etar(da)
-aux_bc = auxbc(da)
-
-try:
-    os.makedirs(save_outdir)
-except: OSError("directory already exist")
-
-if debug_eta:
     if MPI.COMM_WORLD.rank==0:
-        print 'printing debug eta'
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as pylab
+        print 'wave velocity is          ', v.min()
+        print 'x-propagation distance    ', x_upper-x_lower
+        print 'grid size, (ddx, ddy)     ', ddx, ddy
+        print 'grid points (nx, ny)      ', nx,ny
+        print 'total propagation time    ', t_final,
+        print 'number of time steps      ', max_steps
+    # create DA and allocate global and local variables
+
+    if mat_dispersion:
+        from fdtd_da_pml import fdtddispersion2d as fdtd_2d
+        from fdtd_da_pml import calcdispersion2d
+    else:
+        from fdtd_da_pml import fdtd2d as fdtd_2d
+
+    tic2 = MPI.Wtime()
+
+    stype  = PETSc.DA.StencilType.STAR
+    swidth = 1
+    da = PETSc.DA().create([nx,ny], dof=1,
+                           stencil_type=stype,
+                           stencil_width=swidth)
+
+    ( xi, xf), ( yi, yf) = da.getRanges()
+    (gxi,gxf), (gyi,gyf) = da.getGhostRanges()
+
+    Q1 = da.createGlobalVec()
+    Q2 = da.createGlobalVec()
+    Q3 = da.createGlobalVec()
+    Q1loc = da.createLocalVec()
+    Q2loc = da.createLocalVec()
+    Q3loc = da.createLocalVec()
+
+    q1 = Q1loc.getArray().reshape([gxf-gxi,gyf-gyi], order='F')
+    q2 = Q2loc.getArray().reshape([gxf-gxi,gyf-gyi], order='F')
+    q3 = Q3loc.getArray().reshape([gxf-gxi,gyf-gyi], order='F')
+
+    s1  = np.zeros([xf-xi,yf-yi], order='F')
+    s2  = np.zeros([xf-xi,yf-yi], order='F')
+    s3  = np.zeros([xf-xi,yf-yi], order='F')
+    s4  = np.zeros([xf-xi,yf-yi], order='F')
+
+
+    if mat_dispersion:
+        p1    = np.zeros([num_poles,3,xf-xi,yf-yi], order='F')
+        p2    = np.zeros([num_poles,3,xf-xi,yf-yi], order='F')
+        p3    = np.zeros([num_poles,3,xf-xi,yf-yi], order='F')
+        psum  = np.zeros([3,xf-xi,yf-yi], order='F')
+     
+        c1    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
+        c2    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
+        c3    = np.zeros([num_poles,xf-xi,yf-yi], order='F')
+    else:
+        pass
+
+    aux = etar(da)
+    aux_bc = auxbc(da)
+
+    try:
+        os.makedirs(save_outdir+'_'+str(test))
+    except: OSError("directory already exist")
+
+    if debug_eta:
+        if MPI.COMM_WORLD.rank==0:
+            print 'printing debug eta'
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as pylab
+            pylab.figure()
+            pylab.imshow(aux[1,:,:].transpose())
+            pylab.colorbar()
+            pylab.draw()
+            print 'saving'
+            pylab.savefig(os.path.join(save_outdir+'_'+str(test),'aux_'+save_name+'.png'))
+
+    if debug_auxbc:
+        from matplotlib import pylab
         pylab.figure()
-        pylab.imshow(aux[1,:,:].transpose())
+        pylab.pcolor(aux_bc[0,:,:].copy())
         pylab.colorbar()
         pylab.draw()
-        print 'saving'
-        pylab.savefig(os.path.join(save_outdir,'aux_'+save_name+'.png'))
-
-if debug_auxbc:
-    from matplotlib import pylab
-    pylab.figure()
-    pylab.pcolor(aux_bc[0,:,:].copy())
-    pylab.colorbar()
-    pylab.draw()
-    pylab.savefig(os.path.join(save_outdir,'aux_bc_'+save_name+'.png'))
-
-if liveview:
-    draw = PETSc.Viewer.DRAW()
-
-
-
-# create a temporary dictionary with the parameters simulation
-if MPI.COMM_WORLD.rank==0:
-    params  = { 'outdir':save_outdir,
-                'nx': nx,
-                'ny': ny,
-                'dt': dt,
-                'dx': ddx,
-                'dy': ddy,
-                'num_steps': max_steps,
-                't_final': t_final,
-                'dimensions':[x_lower,x_upper,y_lower,y_upper],
-                'shape': mat_shape,
-                'ex_type': ex_type,
-                'lambda': ex_lambda,
-                'eta' : eta,
-                'bc_lower': bc_lower,
-                'bc_upper': bc_upper,
-                'aux_bc_lower': aux_bc_lower,
-                'aux_bc_upper': aux_bc_upper
-              }
-
-    pkl_out = open(os.path.join(save_outdir,save_name+'.pkl'), 'wb')
-    pkl.dump(params, pkl_out)
-    pkl_out.close()
-
-ki = int(0)
-for n in range(0,int(max_steps)):
-    if n == 0:
-        t = n*dt
-        qinit(Q1,Q2,Q3,da)
-        qbc(Q1,Q2,Q3,da,t)
-
-    t = n*dt
-
-    if before_step:
-        pec_sphere(Q1,Q2,Q3,da)
-        #aux = etar(da,ddx,ddy,t)
-
-
-    bc_scattering(Q1,Q2,Q3,da,t,0,0)
-    bc_scattering(Q1,Q2,Q3,da,t,1,0)
-    
-    if mat_dispersion:
-        da.globalToLocal(Q1, Q1loc)
-        da.globalToLocal(Q2, Q2loc)
-        fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
-        da.localToGlobal(Q3loc, Q3)
-
-        da.globalToLocal(Q3, Q3loc)
-        fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
-        da.localToGlobal(Q1loc, Q1)
-        da.localToGlobal(Q2loc, Q2)
-
-        CalcDispersion2D(q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
-        CalcDispersion2D(q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
-
-    else:
-        da.globalToLocal(Q1, Q1loc)
-        da.globalToLocal(Q2, Q2loc)
-        fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
-        da.localToGlobal(Q3loc, Q3)
-
-        da.globalToLocal(Q3, Q3loc)
-        fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
-        da.localToGlobal(Q1loc, Q1)
-        da.localToGlobal(Q2loc, Q2)
-
+        pylab.savefig(os.path.join(save_outdir+'_'+str(test),'aux_bc_'+save_name+'.png'))
 
     if liveview:
-        Q3.view(draw)
+        draw = PETSc.Viewer.DRAW()
+
+
+
+    # create a temporary dictionary with the parameters simulation
+    if MPI.COMM_WORLD.rank==0:
+        params  = { 'outdir':save_outdir+'_'+str(test),
+                    'nx': nx,
+                    'ny': ny,
+                    'dt': dt,
+                    'dx': ddx,
+                    'dy': ddy,
+                    'num_steps': max_steps,
+                    't_final': t_final,
+                    'dimensions':[x_lower,x_upper,y_lower,y_upper],
+                    'shape': mat_shape,
+                    'ex_type': ex_type,
+                    'lambda': ex_lambda,
+                    'eta' : eta,
+                    'bc_lower': bc_lower,
+                    'bc_upper': bc_upper,
+                    'aux_bc_lower': aux_bc_lower,
+                    'aux_bc_upper': aux_bc_upper
+                  }
+
+        pkl_out = open(os.path.join(save_outdir+'_'+str(test),save_name+'.pkl'), 'wb')
+        pkl.dump(params, pkl_out)
+        pkl_out.close()
+
+    tic3 = MPI.Wtime()
+    ki = int(0)
+    for n in range(0,int(max_steps)):
+        if n == 0:
+            t = n*dt
+            qinit(Q1,Q2,Q3,da)
+            qbc(Q1,Q2,Q3,da,t)
+
+        t = n*dt
+
+        if before_step:
+            pec_sphere(Q1,Q2,Q3,da)
+            #aux = etar(da,ddx,ddy,t)
+
+
+        bc_scattering(Q1,Q2,Q3,da,t,0,0)
+        bc_scattering(Q1,Q2,Q3,da,t,1,0)
+        
+        if mat_dispersion:
+            da.globalToLocal(Q1, Q1loc)
+            da.globalToLocal(Q2, Q2loc)
+            fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
+            da.localToGlobal(Q3loc, Q3)
+
+            da.globalToLocal(Q3, Q3loc)
+            fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
+            da.localToGlobal(Q1loc, Q1)
+            da.localToGlobal(Q2loc, Q2)
+
+            CalcDispersion2D(q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
+            CalcDispersion2D(q1,q2,q3,c1,c2,c3,p1,p2,p3,psum,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
+
+        else:
+            da.globalToLocal(Q1, Q1loc)
+            da.globalToLocal(Q2, Q2loc)
+            fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,0,1)
+            da.localToGlobal(Q3loc, Q3)
+
+            da.globalToLocal(Q3, Q3loc)
+            fdtd_2d(aux,aux_bc,dxdt,dydt,s1,s2,s3,s4,q1,q2,q3,xi+1,xf,yi+1,yf,gxi+1,gxf,gyi+1,gyf,1,1)
+            da.localToGlobal(Q1loc, Q1)
+            da.localToGlobal(Q2loc, Q2)
+
+        if liveview:
+            Q3.view(draw)
+        
+        if np.mod(n,n_write)==0:
+            if write_q:
+                save_q_name = 'step'+str(ki).zfill(len(str(int(n_frames)))+2)+'.bin'
+                write(Q1,Q3,Q3,os.path.join(save_outdir+'_'+str(test),save_q_name))
+                ki = ki+1
+
+            if info:
+                if MPI.COMM_WORLD.rank == 0:
+                    print 'percentage of simulation completed: ', str(np.floor(100.0*n/max_steps))[0:3], ' at time  ', str(t)[0:10]
+
+        if gauge:
+            prb = gauges(da)
+            prb.probe('Q2', Q2)
+            prb.probe('Q3', Q3)
     
-    if np.mod(n,n_write)==0:
-        if write_q:
-            save_q_name = 'step'+str(ki).zfill(len(str(int(n_frames)))+2)+'.bin'
-            write(Q1,Q3,Q3,os.path.join(save_outdir,save_q_name))
-            ki = ki+1
+    toc = MPI.Wtime()
+    timeVec2.array = toc - tic2
+    timeVec3.array = toc - tic3
+    duration2 = timeVec2.max()[1]
+    duration3 = timeVec3.max()[1]
+    if MPI.COMM_WORLD.rank==0:
+        print 'time of computation was: ', str(duration3),'\n'
+        print '===================================================== \n'
 
-        if info:
-            if MPI.COMM_WORLD.rank == 0:
-                print 'percentage of simulation completed: ', str(np.floor(100.0*n/max_steps))[0:3], ' at time  ', str(t)[0:10]
+    if test>4:
+        q1r = q1[::2,::2] + q1[1::2,::2] + q1[::2,1::2] + q1[1::2,1::2]
+        q1r = q1r/4.0
+        q2r = q2[::2,::2] + q2[1::2,::2] + q2[::2,1::2] + q2[1::2,1::2]
+        q2r = q2r/4.0
+        q3r = q3[::2,::2] + q3[1::2,::2] + q3[::2,1::2] + q3[1::2,1::2]
+        q3r = q3r/4.0
+        error[:,test-4,1] = ddx
+        error[:,test-4,2] = ddy
+        error[:,test-4,8] = duration3
+        error[:,test-4,6] = dt
+        error[:,test-4,7] = max_steps
+        error[0,test-4,3] = np.linalg.norm(q1_old - q1r,1)
+        error[0,test-4,4] = np.linalg.norm(q1r,1)
+        error[0,test-4,5] = ddx*ddy*error[0,test-4,3]/error[0,test-4,4]
 
-    if gauge:
-        prb = gauges(da)
-        prb.probe('Q2', Q2)
-        prb.probe('Q3', Q3)
+        error[1,test-4,3] = np.linalg.norm(q2_old - q2r,1)
+        error[1,test-4,4] = np.linalg.norm(q2r,1)
+        error[1,test-4,5] = ddx*ddy*error[0,test-4,3]/error[0,test-4,4]
 
-if write_gauge and gauge:
-    prb.save(os.path.join(save_outdir,'probe'+save_name+'.dat'))
+        error[2,test-4,3] = np.linalg.norm(q3_old - q3r,1)
+        error[2,test-4,4] = np.linalg.norm(q3r,1)
+        error[2,test-4,5] = ddx*ddy*error[0,test-4,3]/error[0,test-4,4]
+    elif test==4:
+        error[:,test-4,1] = ddx
+        error[:,test-4,2] = ddy
+        error[:,test-4,8] = duration3
+        error[:,test-4,6] = dt
+        error[:,test-4,7] = max_steps
+        error[0,test-4,3] = np.linalg.norm(q1,1)
+        error[0,test-4,4] = np.linalg.norm(q1,1)
+        error[0,test-4,5] = ddx*ddy*error[0,test-4,3]/error[0,test-4,4]
 
+        error[1,test-4,3] = np.linalg.norm(q2,1)
+        error[1,test-4,4] = np.linalg.norm(q2,1)
+        error[1,test-4,5] = ddx*ddy*error[0,test-4,3]/error[0,test-4,4]
+
+        error[2,test-4,3] = np.linalg.norm(q3,1)
+        error[2,test-4,4] = np.linalg.norm(q3,1)
+        error[2,test-4,5] = ddx*ddy*error[0,test-4,3]/error[0,test-4,4]
+
+    q1_old = q1
+    q2_old = q2
+    q3_old = q3
+    if write_gauge and gauge:
+        prb.save(os.path.join(save_outdir+'_'+str(test),'probe'+save_name+'.dat'))
+
+toc2 = MPI.Wtime()
+timeVec1.array = toc2 - tic1
+duration1 = timeVec1.max()[1]
+if MPI.COMM_WORLD.rank==0:
+    print 'total time to do test: ', str(duration1)
+
+np.save('errorsc',error)
 sys.exit()
